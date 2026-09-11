@@ -10,6 +10,7 @@ Android arcade precision game for RuStore.
 - TypeScript (strict)
 - React Native Skia
 - React Navigation
+- AsyncStorage (local progression)
 - Jest + ESLint
 
 ## Setup
@@ -36,17 +37,15 @@ npm run lint
 
 ## Architecture
 
-Core gameplay (Phase 2) is playable: tap → flight → impact → attach or loss → win / instant retry.
+- **30 campaign levels** with deterministic looping rotation timelines
+  (constant, speed ramps, pauses, reversals).
+- **Authoritative timing:** `targetRotationAtElapsed(level, elapsedMs)` —
+  rendering and collision sample the same compiled timeline.
+  Impact elapsed is fixed at throw start (`throwStart + flightMs`).
+- **Progression:** local versioned storage (`highestUnlockedLevel`, completed ids).
+  Fresh install unlocks Level 1 only.
+- **Validation:** `validateLevelCollection(PRODUCTION_LEVELS)` guards configs.
+- **Dev QA (`__DEV__` only):** unlock-all / reset on Levels screen.
 
-**Authoritative timing:** target rotation is `targetAngleAtElapsed(level, elapsedMs)`.
-Rendering and collision both use that formula. Impact angle is fixed at throw start
-as `throwStartElapsedMs + FLIGHT_DURATION_MS` (not a late animation clock read).
-
-**Separation:**
-
-- `src/game/math` — angle helpers and world↔local transforms (no UI)
-- `src/game/engine` — throw / impact / win / loss state transitions
-- `src/components/GameCanvas.tsx` — Skia presentation; Reanimated shared values for rotation/flight (no React state per frame)
-- `src/hooks/useGameController.ts` — semantic React updates only
-
-Ads, economy, bosses, signing, and RuStore upload are out of scope.
+`src/game/engine` = rules + timeline. `GameCanvas` = Skia presentation.
+Background AppState freezes round elapsed so the target does not spin while away.

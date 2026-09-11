@@ -1,11 +1,11 @@
 /**
  * Skia renderer for Precision Throw.
- * Target rotation comes from the same elapsed-time formula as collision:
- *   elapsed = clock - roundStartClock
- *   angle = signedSpeed * elapsed / 1000
- * No independent visual clock.
+ * Target rotation samples the same compiled timeline as collision:
+ *   elapsed = paused ? frozenElapsed : clock - roundStartClock
+ *   angle = sampleCompiledTimeline(...)
  */
 
+import { useMemo } from 'react'
 import { StyleSheet, useWindowDimensions, View } from 'react-native'
 import {
 	Canvas,
@@ -20,7 +20,10 @@ import {
 	type SharedValue,
 } from 'react-native-reanimated'
 
-import { signedAngularSpeedDegreesPerSecond } from '../game/engine'
+import {
+	compileLevelTimeline,
+	sampleCompiledTimeline,
+} from '../game/engine'
 import type { AttachedProjectile, LevelConfig } from '../game/models'
 import { colors } from '../theme'
 
@@ -29,12 +32,12 @@ interface GameCanvasProps {
 	attachedProjectiles: AttachedProjectile[]
 	clock: SharedValue<number>
 	roundStartClock: SharedValue<number>
+	/** 1 while app background pause is active. */
+	isPaused: SharedValue<number>
+	frozenElapsedMs: SharedValue<number>
 	flightProgress: SharedValue<number>
-	/** When true, draw the resting projectile at the bottom. */
 	showReadyProjectile: boolean
-	/** When true, draw the vertically animated flying projectile. */
 	showFlyingProjectile: boolean
-	/** Local-angle flash marker after a collision (degrees), or null. */
 	collisionLocalAngle: number | null
 	collisionFlashVisible: boolean
 }
@@ -44,6 +47,8 @@ export function GameCanvas ({
 	attachedProjectiles,
 	clock,
 	roundStartClock,
+	isPaused,
+	frozenElapsedMs,
 	flightProgress,
 	showReadyProjectile,
 	showFlyingProjectile,
@@ -51,6 +56,7 @@ export function GameCanvas ({
 	collisionFlashVisible,
 }: GameCanvasProps) {
 	const { width } = useWindowDimensions()
+	const compiled = useMemo(() => compileLevelTimeline(level), [level])
 
 	const size = Math.min(width - 32, 360)
 	const canvasHeight = size * 1.35
@@ -61,13 +67,33 @@ export function GameCanvas ({
 	const restY = size * 1.12
 	const impactY = center + targetRadius - 4
 
-	const signedSpeed = signedAngularSpeedDegreesPerSecond(level)
+	const {
+		cycleDurationMs,
+		anglePerCycle,
+		segmentCount,
+		durations,
+		startSpeeds,
+		endSpeeds,
+		angleBeforeSegment,
+	} = compiled
 
 	const targetTransform = useDerivedValue(() => {
 		'worklet'
-		const elapsedMs = clock.value - roundStartClock.value
-		const radians = ((elapsedMs / 1000) * signedSpeed * Math.PI) / 180
-		return [{ rotate: radians }]
+		const elapsedMs =
+			isPaused.value === 1
+				? frozenElapsedMs.value
+				: clock.value - roundStartClock.value
+		const sample = sampleCompiledTimeline(
+			elapsedMs,
+			cycleDurationMs,
+			anglePerCycle,
+			segmentCount,
+			durations,
+			startSpeeds,
+			endSpeeds,
+			angleBeforeSegment,
+		)
+		return [{ rotate: (sample.angle * Math.PI) / 180 }]
 	})
 
 	const flyingY = useDerivedValue(() => {
@@ -83,7 +109,6 @@ export function GameCanvas ({
 		<View style={[styles.wrap, { width: size, height: canvasHeight }]}>
 			<Canvas style={{ width: size, height: canvasHeight }}>
 				<Group transform={[...outerShake]}>
-					{/* Central rotating target + local-space attachments */}
 					<Group origin={vec(center, center)} transform={targetTransform}>
 						<Circle
 							cx={center}
@@ -148,7 +173,6 @@ export function GameCanvas ({
 					</Group>
 				</Group>
 
-				{/* Flying projectile — world space, vertical only */}
 				{showFlyingProjectile ? (
 					<RoundedRect
 						x={center - projectileWidth / 2}
@@ -160,7 +184,6 @@ export function GameCanvas ({
 					/>
 				) : null}
 
-				{/* Ready projectile at rest */}
 				{showReadyProjectile ? (
 					<RoundedRect
 						x={center - projectileWidth / 2}

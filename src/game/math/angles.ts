@@ -32,6 +32,7 @@ export const WORLD_IMPACT_ANGLE_DEGREES = 180
  * Wraps any angle into the half-open range [0, 360).
  */
 export function normalizeAngle (angle: number): number {
+	'worklet'
 	const wrapped = angle % FULL_CIRCLE
 	return wrapped < 0 ? wrapped + FULL_CIRCLE : wrapped
 }

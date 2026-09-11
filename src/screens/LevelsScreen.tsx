@@ -1,5 +1,5 @@
 /**
- * Level selection stub — a few prototype entries for navigation wiring.
+ * Campaign level grid — 30 levels with locked / unlocked / completed states.
  */
 
 import { Pressable, StyleSheet, Text, View } from 'react-native'
@@ -7,43 +7,104 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 
 import { PrimaryButton } from '../components/PrimaryButton'
 import { Screen } from '../components/Screen'
-import { PROTOTYPE_LEVELS } from '../game/config/levels'
+import { PRODUCTION_LEVELS } from '../game/config/levels'
+import { compileLevelTimeline } from '../game/engine'
 import type { RootStackParamList } from '../navigation/types'
+import {
+	isLevelCompleted,
+	isLevelUnlocked,
+} from '../storage/progression'
+import { useProgressionContext } from '../storage/ProgressionProvider'
 import { colors, radii, spacing, touchTarget, typography } from '../theme'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Levels'>
 
 export function LevelsScreen ({ navigation }: Props) {
+	const { progression, unlockAllForQa, resetForQa } = useProgressionContext()
+
 	return (
 		<Screen scroll>
 			<Text style={styles.title}>Уровни</Text>
 			<Text style={styles.subtitle}>
-				Выберите уровень. Полный набор появится позже.
+				Открыто до уровня {progression.highestUnlockedLevel} из{' '}
+				{PRODUCTION_LEVELS.length}
 			</Text>
 
-			<View style={styles.list}>
-				{PROTOTYPE_LEVELS.map((level) => (
-					<Pressable
-						key={level.id}
-						accessibilityRole="button"
-						style={({ pressed }) => [
-							styles.card,
-							pressed && styles.cardPressed,
-						]}
-						onPress={() =>
-							navigation.navigate('Game', { levelId: level.id })
-						}
-					>
-						<Text style={styles.cardTitle}>
-							Уровень {level.displayNumber}
-						</Text>
-						<Text style={styles.cardMeta}>
-							{level.requiredThrows} бросков · скорость{' '}
-							{level.initialSpeed}
-						</Text>
-					</Pressable>
-				))}
+			<View style={styles.grid}>
+				{PRODUCTION_LEVELS.map((level) => {
+					const unlocked = isLevelUnlocked(
+						progression,
+						level.displayNumber,
+					)
+					const completed = isLevelCompleted(
+						progression,
+						level.displayNumber,
+					)
+					return (
+						<Pressable
+							key={level.id}
+							accessibilityRole="button"
+							accessibilityState={{ disabled: !unlocked }}
+							disabled={!unlocked}
+							style={({ pressed }) => [
+								styles.cell,
+								!unlocked && styles.cellLocked,
+								completed && styles.cellCompleted,
+								pressed && unlocked && styles.cellPressed,
+							]}
+							onPress={() => {
+								if (!unlocked) {
+									return
+								}
+								navigation.navigate('Game', { levelId: level.id })
+							}}
+						>
+							<Text
+								style={[
+									styles.cellNumber,
+									!unlocked && styles.cellNumberLocked,
+								]}
+							>
+								{level.displayNumber}
+							</Text>
+							<View style={styles.cellBadge}>
+								{completed ? (
+									<View style={styles.completedMark} />
+								) : null}
+								{!unlocked ? (
+									<View style={styles.lockMark} />
+								) : null}
+							</View>
+							{__DEV__ ? (
+								<Text style={styles.devMeta}>
+									{compileLevelTimeline(level).segmentCount}s
+								</Text>
+							) : null}
+						</Pressable>
+					)
+				})}
 			</View>
+
+			{__DEV__ ? (
+				<View style={styles.devPanel}>
+					<Text style={styles.devTitle}>DEV QA</Text>
+					<PrimaryButton
+						label="Открыть все уровни для QA"
+						variant="secondary"
+						onPress={() => {
+							void unlockAllForQa()
+						}}
+					/>
+					<View style={styles.devSpacer} />
+					<PrimaryButton
+						label="Сбросить прогресс"
+						variant="ghost"
+						onPress={() => {
+							void resetForQa()
+						}}
+					/>
+				</View>
+			) : null}
 
 			<PrimaryButton
 				label="Назад"
@@ -67,29 +128,83 @@ const styles = StyleSheet.create({
 		marginBottom: spacing.lg,
 		lineHeight: 22,
 	},
-	list: {
-		gap: spacing.sm,
+	grid: {
+		flexDirection: 'row',
+		flexWrap: 'wrap',
+		justifyContent: 'space-between',
+		rowGap: spacing.sm,
 		marginBottom: spacing.lg,
 	},
-	card: {
+	cell: {
+		width: '18%',
 		minHeight: touchTarget.minHeight,
-		backgroundColor: colors.surface,
+		aspectRatio: 1,
 		borderRadius: radii.md,
-		padding: spacing.md,
+		backgroundColor: colors.surface,
 		borderWidth: 1,
 		borderColor: colors.border,
+		alignItems: 'center',
+		justifyContent: 'center',
+		padding: spacing.xs,
+		marginBottom: 2,
 	},
-	cardPressed: {
+	cellLocked: {
+		opacity: 0.45,
+	},
+	cellCompleted: {
+		borderColor: colors.accent,
+	},
+	cellPressed: {
 		opacity: 0.85,
 	},
-	cardTitle: {
+	cellNumber: {
 		color: colors.text,
 		fontSize: typography.body,
-		fontWeight: '600',
+		fontWeight: '700',
 	},
-	cardMeta: {
+	cellNumberLocked: {
 		color: colors.textMuted,
-		fontSize: typography.caption,
-		marginTop: 4,
+	},
+	cellBadge: {
+		position: 'absolute',
+		top: 6,
+		right: 6,
+		flexDirection: 'row',
+		gap: 4,
+	},
+	completedMark: {
+		width: 8,
+		height: 8,
+		borderRadius: 4,
+		backgroundColor: colors.accent,
+	},
+	lockMark: {
+		width: 8,
+		height: 8,
+		borderRadius: 2,
+		backgroundColor: colors.textMuted,
+	},
+	devMeta: {
+		position: 'absolute',
+		bottom: 4,
+		color: colors.textMuted,
+		fontSize: 10,
+	},
+	devPanel: {
+		gap: spacing.xs,
+		marginBottom: spacing.lg,
+		padding: spacing.md,
+		borderRadius: radii.md,
+		borderWidth: 1,
+		borderColor: colors.border,
+		backgroundColor: colors.surfaceElevated,
+	},
+	devTitle: {
+		color: colors.primary,
+		fontWeight: '700',
+		marginBottom: spacing.xs,
+	},
+	devSpacer: {
+		height: spacing.xs,
 	},
 })

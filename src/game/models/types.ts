@@ -14,12 +14,21 @@ export type GameStatus =
 	| 'won'
 	| 'lost'
 
-/** Rotation direction of the circular target. */
-export type TargetDirection = 'clockwise' | 'counterClockwise'
+/**
+ * One continuous rotation segment.
+ * Speeds are signed degrees/second: positive = clockwise, negative = CCW.
+ * Linearly ramps from startSpeed → endSpeed over durationMs.
+ * Pause = both speeds 0. Reversal = consecutive segments with opposite signs.
+ */
+export interface RotationSegment {
+	durationMs: number
+	startSpeed: number
+	endSpeed: number
+}
 
 /**
  * Static level definition.
- * Speeds and sizes are domain units (degrees / abstract radii), not pixels.
+ * Target motion is fully described by `segments` (looped).
  */
 export interface LevelConfig {
 	id: string
@@ -27,9 +36,6 @@ export interface LevelConfig {
 	displayNumber: number
 	/** How many successful attaches are required to win. */
 	requiredThrows: number
-	/** Target angular speed in degrees per second. */
-	initialSpeed: number
-	direction: TargetDirection
 	/** Abstract target radius used by collision geometry. */
 	targetRadius: number
 	/**
@@ -39,6 +45,8 @@ export interface LevelConfig {
 	projectileSize: number
 	/** Pre-attached obstacles as LOCAL target angles in degrees [0, 360). */
 	initialObstacles: number[]
+	/** Looping rotation timeline. Must contain at least one segment. */
+	segments: RotationSegment[]
 }
 
 /** A projectile that has already stuck to the target rim. */
@@ -89,3 +97,17 @@ export type BeginThrowResult =
 			throwStartElapsedMs: number
 			impactElapsedMs: number
 	  }
+
+/** Snapshot of target motion at a single authoritative elapsed time. */
+export interface TimelineSample {
+	/** Continuous rotation angle in degrees (may exceed 360 before normalize). */
+	rawAngleDegrees: number
+	/** Normalized display/collision angle in [0, 360). */
+	angle: number
+	/** Instantaneous signed speed (deg/s) at this elapsed time. */
+	signedSpeed: number
+	/** Active segment index within the looping cycle. */
+	segmentIndex: number
+	/** Elapsed ms within the current cycle [0, cycleDuration). */
+	cycleElapsedMs: number
+}

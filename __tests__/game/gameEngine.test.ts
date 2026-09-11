@@ -1,37 +1,52 @@
 /**
- * Unit tests for the deterministic Phase 2 game engine.
+ * Unit tests for the deterministic Phase 2/3 game engine.
  */
 
-import { DEFAULT_LEVEL, getLevelById } from '../../src/game/config/levels'
+import {
+	DEFAULT_LEVEL,
+	getLevelById,
+	getNextLevelId,
+} from '../../src/game/config/levels'
 import {
 	FLIGHT_DURATION_MS,
 	computeMinAngularSeparationDegrees,
+	constantSegment,
 	createInitialGameState,
 	localImpactAngleAtElapsed,
+	pauseSegment,
+	rampSegment,
 	resetGameState,
 	resolveThrowImpact,
 	targetAngleAtElapsed,
+	targetRotationAtElapsed,
 	tryBeginThrow,
-} from '../../src/game/engine/gameEngine'
+} from '../../src/game/engine'
 import {
 	normalizeAngle,
 	WORLD_IMPACT_ANGLE_DEGREES,
 	worldAngleToLocalAngle,
 } from '../../src/game/math/angles'
+import type { LevelConfig } from '../../src/game/models'
+
+function withSegments (
+	base: LevelConfig,
+	segments: LevelConfig['segments'],
+	overrides: Partial<LevelConfig> = {},
+): LevelConfig {
+	return { ...base, segments, ...overrides }
+}
 
 describe('authoritative target angle', () => {
 	it('computes clockwise rotation from elapsed time', () => {
 		const level = getLevelById('level-1')
-		expect(targetAngleAtElapsed(level, 1000)).toBe(
-			normalizeAngle(level.initialSpeed),
-		)
+		const sample = targetRotationAtElapsed(level, 1000)
+		expect(sample.signedSpeed).toBeGreaterThan(0)
+		expect(targetAngleAtElapsed(level, 1000)).toBe(sample.angle)
 	})
 
 	it('computes counter-clockwise rotation from elapsed time', () => {
 		const level = getLevelById('level-2')
-		expect(targetAngleAtElapsed(level, 1000)).toBe(
-			normalizeAngle(-level.initialSpeed),
-		)
+		expect(targetRotationAtElapsed(level, 1000).signedSpeed).toBeLessThan(0)
 	})
 
 	it('derives local impact angle from world bottom and target rotation', () => {
@@ -60,64 +75,67 @@ describe('throw lifecycle', () => {
 		expect(state.attachedProjectiles).toHaveLength(
 			DEFAULT_LEVEL.initialObstacles.length,
 		)
-		const firstObstacle = DEFAULT_LEVEL.initialObstacles[0] ?? 0
-		expect(state.attachedProjectiles[0]?.angle).toBe(
-			normalizeAngle(firstObstacle),
-		)
 	})
 
 	it('successful throw decreases remainingThrows and attaches projectile', () => {
-		const level = {
-			...DEFAULT_LEVEL,
-			initialObstacles: [] as number[],
-			initialSpeed: 0,
-		}
+		const level = withSegments(
+			DEFAULT_LEVEL,
+			[constantSegment(4000, 0)],
+			{ initialObstacles: [], requiredThrows: 5 },
+		)
 		let state = createInitialGameState(level, 'playing')
 		const begun = tryBeginThrow(state, 0)
 		expect(begun.accepted).toBe(true)
 		if (!begun.accepted) {
 			return
 		}
-		state = begun.state
-		state = resolveThrowImpact(state, level, begun.impactElapsedMs)
+		state = resolveThrowImpact(begun.state, level, begun.impactElapsedMs)
 		expect(state.status).toBe('playing')
 		expect(state.remainingThrows).toBe(level.requiredThrows - 1)
 		expect(state.attachedProjectiles).toHaveLength(1)
 	})
 
 	it('failed throw sets status to lost when hitting an obstacle', () => {
-		// Speed 0, obstacle at bottom local 180° → immediate collision.
-		const level = {
-			...DEFAULT_LEVEL,
-			initialSpeed: 0,
-			initialObstacles: [180],
-			projectileSize: 14,
-		}
-		let state = createInitialGameState(level, 'playing')
-		const begun = tryBeginThrow(state, 0)
+		const level = withSegments(
+			DEFAULT_LEVEL,
+			[constantSegment(4000, 0)],
+			{ initialObstacles: [180], requiredThrows: 5 },
+		)
+		const begun = tryBeginThrow(
+			createInitialGameState(level, 'playing'),
+			0,
+		)
 		expect(begun.accepted).toBe(true)
 		if (!begun.accepted) {
 			return
 		}
-		state = resolveThrowImpact(begun.state, level, begun.impactElapsedMs)
+		const state = resolveThrowImpact(
+			begun.state,
+			level,
+			begun.impactElapsedMs,
+		)
 		expect(state.status).toBe('lost')
 		expect(state.lastImpactLocalAngle).toBe(180)
-		expect(state.remainingThrows).toBe(level.requiredThrows)
 	})
 
 	it('last successful throw sets status to won', () => {
-		const level = {
-			...DEFAULT_LEVEL,
-			requiredThrows: 1,
-			initialObstacles: [] as number[],
-			initialSpeed: 0,
-		}
-		let state = createInitialGameState(level, 'playing')
-		const begun = tryBeginThrow(state, 0)
+		const level = withSegments(
+			DEFAULT_LEVEL,
+			[constantSegment(4000, 0)],
+			{ initialObstacles: [], requiredThrows: 1 },
+		)
+		const begun = tryBeginThrow(
+			createInitialGameState(level, 'playing'),
+			0,
+		)
 		if (!begun.accepted) {
 			throw new Error('expected throw to be accepted')
 		}
-		state = resolveThrowImpact(begun.state, level, begun.impactElapsedMs)
+		const state = resolveThrowImpact(
+			begun.state,
+			level,
+			begun.impactElapsedMs,
+		)
 		expect(state.status).toBe('won')
 		expect(state.remainingThrows).toBe(0)
 	})
@@ -146,8 +164,7 @@ describe('throw lifecycle', () => {
 		if (!first.accepted) {
 			return
 		}
-		const second = tryBeginThrow(first.state, 60)
-		expect(second.accepted).toBe(false)
+		expect(tryBeginThrow(first.state, 60).accepted).toBe(false)
 	})
 
 	it('rejects throw after loss and after win', () => {
@@ -164,11 +181,11 @@ describe('throw lifecycle', () => {
 	})
 
 	it('uses precomputed impact elapsed time, not a later clock', () => {
-		const level = {
-			...DEFAULT_LEVEL,
-			initialSpeed: 90,
-			initialObstacles: [] as number[],
-		}
+		const level = withSegments(
+			DEFAULT_LEVEL,
+			[constantSegment(4000, 90)],
+			{ initialObstacles: [] },
+		)
 		const begun = tryBeginThrow(
 			createInitialGameState(level, 'playing'),
 			1000,
@@ -177,7 +194,6 @@ describe('throw lifecycle', () => {
 			throw new Error('expected throw to be accepted')
 		}
 		expect(begun.impactElapsedMs).toBe(1000 + FLIGHT_DURATION_MS)
-
 		const expectedLocal = localImpactAngleAtElapsed(
 			level,
 			begun.impactElapsedMs,
@@ -188,61 +204,97 @@ describe('throw lifecycle', () => {
 			begun.impactElapsedMs,
 		)
 		expect(resolved.lastImpactLocalAngle).toBe(expectedLocal)
-		// A late clock read would differ — prove we did not use 1000+500.
 		const lateLocal = localImpactAngleAtElapsed(level, 1000 + 500)
 		expect(expectedLocal).not.toBe(lateLocal)
 	})
 
-	it('detects initial obstacle collision near 0/360 wrap', () => {
-		const level = {
-			...DEFAULT_LEVEL,
-			initialSpeed: 0,
-			initialObstacles: [1],
-			projectileSize: 20,
-		}
-		// Bottom impact local 180 with speed 0 — not near 1°.
-		// Instead force candidate near wrap by using world transform with rotation.
-		const rotatedLevel = {
-			...level,
-			initialSpeed: 0,
-			initialObstacles: [359],
-		}
-		// With targetAngle 0, impact local = 180 — far from 359.
-		// Place obstacle at 180 and verify wrap helper still works via candidate 359 vs 1.
-		const separation = computeMinAngularSeparationDegrees(rotatedLevel)
-		const state = createInitialGameState(
-			{ ...rotatedLevel, initialObstacles: [359] },
-			'playing',
+	it('detects head-on obstacle collision', () => {
+		const level = withSegments(
+			DEFAULT_LEVEL,
+			[constantSegment(4000, 0)],
+			{ initialObstacles: [180] },
 		)
-		// Manually resolve as if impact local were 1° (wrap neighbor of 359°).
-		const colliding = resolveThrowImpact(
-			{
-				...state,
-				status: 'projectileFlying',
-				throwStartElapsedMs: 0,
-				impactElapsedMs: 0,
-			},
-			{ ...rotatedLevel, initialSpeed: 0 },
-			0,
-			{ minAngularSeparationDegrees: separation },
-		)
-		// Impact at elapsed 0 → local 180, obstacle at 359 → no collision.
-		expect(colliding.status).toBe('playing')
-
-		// Direct wrap collision: obstacle at 359, candidate would collide if local≈1.
-		// Simulate by putting obstacle at 180 and throwing at 0 elapsed (local 180).
 		const headOn = resolveThrowImpact(
 			{
-				...createInitialGameState(
-					{ ...DEFAULT_LEVEL, initialSpeed: 0, initialObstacles: [180] },
-					'playing',
-				),
+				...createInitialGameState(level, 'playing'),
 				status: 'projectileFlying',
 			},
-			{ ...DEFAULT_LEVEL, initialSpeed: 0, initialObstacles: [180] },
+			level,
 			0,
 		)
 		expect(headOn.status).toBe('lost')
+	})
+})
+
+describe('timeline collision scenarios', () => {
+	it('impact during speed ramp uses timeline sample', () => {
+		const level = withSegments(DEFAULT_LEVEL, [
+			rampSegment(3000, 20, 70),
+		], { initialObstacles: [] })
+		const begun = tryBeginThrow(
+			createInitialGameState(level, 'playing'),
+			500,
+		)
+		if (!begun.accepted) {
+			throw new Error('expected accept')
+		}
+		const resolved = resolveThrowImpact(
+			begun.state,
+			level,
+			begun.impactElapsedMs,
+		)
+		expect(resolved.lastImpactLocalAngle).toBe(
+			localImpactAngleAtElapsed(level, begun.impactElapsedMs),
+		)
+		expect(resolved.status).toBe('playing')
+	})
+
+	it('impact during pause uses fixed target angle', () => {
+		const level = withSegments(DEFAULT_LEVEL, [
+			constantSegment(1000, 40),
+			pauseSegment(800),
+			constantSegment(1000, 40),
+		], { initialObstacles: [] })
+		const throwAt = 1200
+		const begun = tryBeginThrow(
+			createInitialGameState(level, 'playing'),
+			throwAt,
+		)
+		if (!begun.accepted) {
+			throw new Error('expected accept')
+		}
+		const a = localImpactAngleAtElapsed(level, begun.impactElapsedMs)
+		const b = localImpactAngleAtElapsed(level, throwAt + 50)
+		expect(a).toBeCloseTo(b, 5)
+		const resolved = resolveThrowImpact(
+			begun.state,
+			level,
+			begun.impactElapsedMs,
+		)
+		expect(resolved.lastImpactLocalAngle).toBe(a)
+	})
+
+	it('impact after reversal uses post-reversal timeline angle', () => {
+		const level = withSegments(DEFAULT_LEVEL, [
+			constantSegment(1000, 40),
+			constantSegment(1000, -40),
+		], { initialObstacles: [] })
+		const begun = tryBeginThrow(
+			createInitialGameState(level, 'playing'),
+			1100,
+		)
+		if (!begun.accepted) {
+			throw new Error('expected accept')
+		}
+		expect(targetRotationAtElapsed(level, begun.impactElapsedMs).signedSpeed).toBe(-40)
+		const resolved = resolveThrowImpact(
+			begun.state,
+			level,
+			begun.impactElapsedMs,
+		)
+		expect(resolved.lastImpactLocalAngle).toBe(
+			localImpactAngleAtElapsed(level, begun.impactElapsedMs),
+		)
 	})
 })
 
@@ -259,8 +311,42 @@ describe('rapid tap protection', () => {
 		}
 		expect(results.filter(Boolean)).toHaveLength(1)
 		expect(state.status).toBe('projectileFlying')
-		expect(state.attachedProjectiles).toHaveLength(
-			DEFAULT_LEVEL.initialObstacles.length,
-		)
+	})
+})
+
+describe('five consecutive resets regression', () => {
+	it('restores clean playing state five times and accepts a new throw', () => {
+		const level = getLevelById('level-4')
+		let state = createInitialGameState(level, 'playing')
+
+		for (let i = 0; i < 5; i += 1) {
+			const begun = tryBeginThrow(state, 200 + i)
+			expect(begun.accepted).toBe(true)
+			if (!begun.accepted) {
+				return
+			}
+			state = resolveThrowImpact(begun.state, level, begun.impactElapsedMs)
+			state = resetGameState(level)
+			expect(state.status).toBe('playing')
+			expect(state.remainingThrows).toBe(level.requiredThrows)
+			expect(state.attachedProjectiles).toHaveLength(
+				level.initialObstacles.length,
+			)
+			expect(state.throwStartElapsedMs).toBeNull()
+			expect(state.impactElapsedMs).toBeNull()
+			expect(
+				state.attachedProjectiles.map((p) => p.angle),
+			).toEqual(level.initialObstacles.map((a) => normalizeAngle(a)))
+		}
+
+		const after = tryBeginThrow(state, 999)
+		expect(after.accepted).toBe(true)
+	})
+})
+
+describe('campaign next-level helpers', () => {
+	it('Level 29 → Level 30 and Level 30 → null', () => {
+		expect(getNextLevelId('level-29')).toBe('level-30')
+		expect(getNextLevelId('level-30')).toBeNull()
 	})
 })

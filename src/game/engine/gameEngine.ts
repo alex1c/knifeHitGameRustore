@@ -3,9 +3,9 @@
  *
  * Authoritative timing
  * --------------------
- * Round elapsed time is monotonic milliseconds since round start.
- * Target rotation is a pure function of (level, elapsedMs).
- * Rendering and collision MUST both use targetAngleAtElapsed(...).
+ * Round elapsed time is monotonic milliseconds of active play (background paused).
+ * Target rotation is targetRotationAtElapsed(level, elapsedMs) — looping timeline.
+ * Rendering and collision MUST both sample that timeline.
  * Impact angle is fixed at throw start as throwStart + FLIGHT_DURATION_MS.
  */
 
@@ -21,6 +21,7 @@ import {
 	WORLD_IMPACT_ANGLE_DEGREES,
 	worldAngleToLocalAngle,
 } from '../math/angles'
+import { targetRotationAtElapsed } from './timeline'
 
 /** Vertical flight duration in milliseconds (arcade timing feel). */
 export const FLIGHT_DURATION_MS = 160
@@ -29,27 +30,13 @@ export const FLIGHT_DURATION_MS = 160
 export const COLLISION_PADDING_DEGREES = 3
 
 /**
- * Signed angular speed in degrees per second.
- * Clockwise is positive to match Skia rotation with y-down.
- */
-export function signedAngularSpeedDegreesPerSecond (
-	level: LevelConfig,
-): number {
-	return level.direction === 'clockwise'
-		? level.initialSpeed
-		: -level.initialSpeed
-}
-
-/**
- * Authoritative target rotation at a given round elapsed time.
+ * Authoritative target rotation angle (normalized) at elapsed round time.
  */
 export function targetAngleAtElapsed (
 	level: LevelConfig,
 	elapsedMs: number,
 ): number {
-	const degrees =
-		signedAngularSpeedDegreesPerSecond(level) * (elapsedMs / 1000)
-	return normalizeAngle(degrees)
+	return targetRotationAtElapsed(level, elapsedMs).angle
 }
 
 /**
@@ -65,7 +52,8 @@ export function localImpactAngleAtElapsed (
 
 /**
  * Minimum center-to-center angular separation from geometry.
- * Uses two projectile half-widths on the rim plus a small padding.
+ * For two equal projectiles this is 2 × halfAngle (+ padding),
+ * i.e. the sum of both angular half-extents on the rim.
  */
 export function computeMinAngularSeparationDegrees (
 	level: LevelConfig,
@@ -73,10 +61,6 @@ export function computeMinAngularSeparationDegrees (
 ): number {
 	const halfWidth = level.projectileSize / 2
 	const halfAngleRadians = Math.atan2(halfWidth, level.targetRadius)
-	// Each projectile occupies ±halfAngle; centers need 2 * halfAngle gap,
-	// and there are two projectiles → 4 * halfAngle between centers... wait:
-	// For objects A and B, min separation = halfExtentA + halfExtentB.
-	// Equal sizes → 2 * halfAngle.
 	const minSeparation =
 		((2 * halfAngleRadians) * 180) / Math.PI + paddingDegrees
 	return minSeparation
@@ -90,7 +74,6 @@ export function collisionConfigForLevel (
 	}
 }
 
-/** @deprecated Prefer collisionConfigForLevel — kept for call-site clarity. */
 export const DEFAULT_COLLISION_CONFIG: CollisionConfig = {
 	minAngularSeparationDegrees: 12,
 }
@@ -205,17 +188,14 @@ export function resolveThrowImpact (
 	}
 }
 
-/**
- * Legacy helper: advances a stored angle by delta seconds.
- * Prefer targetAngleAtElapsed for new code.
- */
-export function advanceTargetAngle (
-	currentAngle: number,
-	level: LevelConfig,
-	deltaSeconds: number,
-): number {
-	return normalizeAngle(
-		currentAngle +
-			signedAngularSpeedDegreesPerSecond(level) * deltaSeconds,
-	)
-}
+export {
+	compileLevelTimeline,
+	compileTimeline,
+	constantSegment,
+	integrateRampDegrees,
+	pauseSegment,
+	rampSegment,
+	sampleCompiledTimeline,
+	segmentTotalDegrees,
+	targetRotationAtElapsed,
+} from './timeline'

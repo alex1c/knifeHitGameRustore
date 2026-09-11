@@ -1,9 +1,10 @@
 export type {
 	GameStatus,
-	TargetDirection,
 	LevelConfig,
 	AttachedProjectile,
 	GameState,
 	CollisionConfig,
 	BeginThrowResult,
+	RotationSegment,
+	TimelineSample,
 } from './types'

@@ -2,7 +2,6 @@ export {
 	FLIGHT_DURATION_MS,
 	COLLISION_PADDING_DEGREES,
 	DEFAULT_COLLISION_CONFIG,
-	signedAngularSpeedDegreesPerSecond,
 	targetAngleAtElapsed,
 	localImpactAngleAtElapsed,
 	computeMinAngularSeparationDegrees,
@@ -11,5 +10,15 @@ export {
 	resetGameState,
 	tryBeginThrow,
 	resolveThrowImpact,
-	advanceTargetAngle,
+	compileLevelTimeline,
+	compileTimeline,
+	constantSegment,
+	integrateRampDegrees,
+	pauseSegment,
+	rampSegment,
+	sampleCompiledTimeline,
+	segmentTotalDegrees,
+	targetRotationAtElapsed,
 } from './gameEngine'
+
+export { freezeElapsed, resumeRoundStart } from './roundClock'

@@ -1,8 +1,8 @@
 /**
- * Playable Game screen — core throw / attach / win / loss loop.
- * Session is keyed by levelId so switching levels remounts a clean round.
+ * Playable Game screen — core throw loop + campaign progression hooks.
  */
 
+import { useEffect, useRef } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -12,6 +12,7 @@ import { PrimaryButton } from '../components/PrimaryButton'
 import { getNextLevelId } from '../game/config/levels'
 import { useGameController } from '../hooks/useGameController'
 import type { RootStackParamList } from '../navigation/types'
+import { useProgressionContext } from '../storage/ProgressionProvider'
 import { colors, radii, spacing, typography } from '../theme'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Game'>
@@ -33,16 +34,28 @@ interface GameSessionProps {
 
 function GameSession ({ levelId, navigation }: GameSessionProps) {
 	const insets = useSafeAreaInsets()
+	const { markLevelCompleted } = useProgressionContext()
+	const recordedWinRef = useRef(false)
 	const {
 		level,
 		state,
 		clock,
 		roundStartClock,
+		isPaused,
+		frozenElapsedMs,
 		flightProgress,
 		collisionFlashVisible,
 		handleTap,
 		handleRetry,
 	} = useGameController(levelId)
+
+	useEffect(() => {
+		if (state.status !== 'won' || recordedWinRef.current) {
+			return
+		}
+		recordedWinRef.current = true
+		void markLevelCompleted(level.displayNumber)
+	}, [level.displayNumber, markLevelCompleted, state.status])
 
 	const showReadyProjectile =
 		state.status === 'playing' || state.status === 'ready'
@@ -52,11 +65,12 @@ function GameSession ({ levelId, navigation }: GameSessionProps) {
 	const canThrow = state.status === 'playing'
 	const showLossOverlay = state.status === 'lost' && !collisionFlashVisible
 	const showWinOverlay = state.status === 'won'
+	const nextLevelId = getNextLevelId(level.id)
+	const isCampaignComplete = showWinOverlay && nextLevelId === null
 
 	const handleNextLevel = () => {
-		const nextId = getNextLevelId(level.id)
-		if (nextId) {
-			navigation.replace('Game', { levelId: nextId })
+		if (nextLevelId) {
+			navigation.replace('Game', { levelId: nextLevelId })
 			return
 		}
 		navigation.navigate('Levels')
@@ -100,6 +114,8 @@ function GameSession ({ levelId, navigation }: GameSessionProps) {
 					attachedProjectiles={state.attachedProjectiles}
 					clock={clock}
 					roundStartClock={roundStartClock}
+					isPaused={isPaused}
+					frozenElapsedMs={frozenElapsedMs}
 					flightProgress={flightProgress}
 					showReadyProjectile={showReadyProjectile}
 					showFlyingProjectile={showFlyingProjectile}
@@ -133,12 +149,18 @@ function GameSession ({ levelId, navigation }: GameSessionProps) {
 			{showWinOverlay ? (
 				<View style={styles.overlay} pointerEvents="box-none">
 					<View style={styles.overlayCard}>
-						<Text style={styles.overlayTitle}>Уровень пройден</Text>
+						<Text style={styles.overlayTitle}>
+							{isCampaignComplete
+								? 'Все уровни пройдены!'
+								: 'Уровень пройден'}
+						</Text>
 						<Text style={styles.overlayBody}>
-							Все броски закреплены на мишени.
+							{isCampaignComplete
+								? 'Кампания из 30 уровней завершена.'
+								: 'Все броски закреплены на мишени.'}
 						</Text>
 						<PrimaryButton
-							label={getNextLevelId(level.id) ? 'Дальше' : 'К уровням'}
+							label={nextLevelId ? 'Дальше' : 'К уровням'}
 							onPress={handleNextLevel}
 						/>
 						<View style={styles.overlaySpacer} />

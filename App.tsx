@@ -8,14 +8,17 @@ import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { StyleSheet } from 'react-native'
 
 import { RootNavigator } from './src/navigation/RootNavigator'
+import { ProgressionProvider } from './src/storage/ProgressionProvider'
 import { colors } from './src/theme'
 
 export default function App () {
 	return (
 		<GestureHandlerRootView style={styles.root}>
 			<SafeAreaProvider>
-				<StatusBar style="light" />
-				<RootNavigator />
+				<ProgressionProvider>
+					<StatusBar style="light" />
+					<RootNavigator />
+				</ProgressionProvider>
 			</SafeAreaProvider>
 		</GestureHandlerRootView>
 	)

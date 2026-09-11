@@ -1,12 +1,11 @@
 /**
  * Game session controller: semantic React state + shared timing for Skia.
- * React state updates only on throw / impact / win / loss / reset.
- *
- * Mount a fresh instance per level via React `key={levelId}` so round timing
- * resets without a setState-in-effect level switcher.
+ * Background/inactive AppState freezes authoritative elapsed time so the
+ * target does not keep spinning while the app is away.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { AppState, type AppStateStatus } from 'react-native'
 import {
 	runOnJS,
 	useSharedValue,
@@ -23,23 +22,21 @@ import {
 	resolveThrowImpact,
 	tryBeginThrow,
 } from '../game/engine'
+import { freezeElapsed, resumeRoundStart } from '../game/engine/roundClock'
 import type { GameState, LevelConfig } from '../game/models'
 
 export interface GameController {
 	level: LevelConfig
 	state: GameState
-	/** Skia clock (ms since canvas mount). */
 	clock: SharedValue<number>
-	/** Clock value captured at round start — elapsed = clock - roundStartClock. */
 	roundStartClock: SharedValue<number>
-	/** 0 = at rest bottom, 1 = at impact. Animated without React frames. */
+	isPaused: SharedValue<number>
+	frozenElapsedMs: SharedValue<number>
 	flightProgress: SharedValue<number>
-	/** Increments on each retry so dependents can observe a new round. */
 	roundId: number
 	collisionFlashVisible: boolean
 	handleTap: () => void
 	handleRetry: () => void
-	/** Elapsed ms from the authoritative shared clock (JS-thread read). */
 	readElapsedMs: () => number
 }
 
@@ -47,6 +44,8 @@ export function useGameController (levelId: string): GameController {
 	const level = getLevelById(levelId)
 	const clock = useClock()
 	const roundStartClock = useSharedValue(0)
+	const isPaused = useSharedValue(0)
+	const frozenElapsedMs = useSharedValue(0)
 	const flightProgress = useSharedValue(0)
 	const [state, setState] = useState<GameState>(() =>
 		createInitialGameState(level, 'playing'),
@@ -56,7 +55,6 @@ export function useGameController (levelId: string): GameController {
 
 	const stateRef = useRef(state)
 	const levelRef = useRef(level)
-	/** Synchronous gate — protects against rapid taps before React re-renders. */
 	const throwGateRef = useRef(false)
 
 	useEffect(() => {
@@ -67,12 +65,45 @@ export function useGameController (levelId: string): GameController {
 		levelRef.current = level
 	}, [level])
 
-	// On mount (including level remount via key), clock and roundStartClock both
-	// start at 0 — no post-paint offset. Retry re-bases roundStartClock explicitly.
-
 	const readElapsedMs = useCallback(() => {
+		if (isPaused.value === 1) {
+			return frozenElapsedMs.value
+		}
 		return clock.value - roundStartClock.value
-	}, [clock, roundStartClock])
+	}, [clock, frozenElapsedMs, isPaused, roundStartClock])
+
+	const pauseRound = useCallback(() => {
+		if (isPaused.value === 1) {
+			return
+		}
+		frozenElapsedMs.value = freezeElapsed(clock.value, roundStartClock.value)
+		isPaused.value = 1
+	}, [clock, frozenElapsedMs, isPaused, roundStartClock])
+
+	const resumeRound = useCallback(() => {
+		if (isPaused.value !== 1) {
+			return
+		}
+		roundStartClock.value = resumeRoundStart(
+			clock.value,
+			frozenElapsedMs.value,
+		)
+		isPaused.value = 0
+	}, [clock, frozenElapsedMs, isPaused, roundStartClock])
+
+	useEffect(() => {
+		const onChange = (next: AppStateStatus) => {
+			if (next === 'active') {
+				resumeRound()
+			} else {
+				pauseRound()
+			}
+		}
+		const subscription = AppState.addEventListener('change', onChange)
+		return () => {
+			subscription.remove()
+		}
+	}, [pauseRound, resumeRound])
 
 	const applyImpact = useCallback((impactElapsedMs: number) => {
 		const current = stateRef.current
@@ -133,19 +164,23 @@ export function useGameController (levelId: string): GameController {
 	const handleRetry = useCallback(() => {
 		throwGateRef.current = false
 		flightProgress.value = 0
+		isPaused.value = 0
 		roundStartClock.value = clock.value
+		frozenElapsedMs.value = 0
 		setCollisionFlashVisible(false)
 		const next = resetGameState(levelRef.current)
 		stateRef.current = next
 		setState(next)
 		setRoundId((id) => id + 1)
-	}, [clock, flightProgress, roundStartClock])
+	}, [clock, flightProgress, frozenElapsedMs, isPaused, roundStartClock])
 
 	return {
 		level,
 		state,
 		clock,
 		roundStartClock,
+		isPaused,
+		frozenElapsedMs,
 		flightProgress,
 		roundId,
 		collisionFlashVisible,
