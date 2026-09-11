@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "Точный бросок",
+    "slug": "precision-throw",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "scheme": "precisionthrow",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.calculatorplatform.precisionthrow"
+    },
+    "android": {
+      "package": "com.calculatorplatform.precisionthrow",
+      "adaptiveIcon": {
+        "backgroundColor": "#0F1A24",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-system-ui"
+    ]
+  }
+}
