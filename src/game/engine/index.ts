@@ -1,6 +1,15 @@
 export {
+	FLIGHT_DURATION_MS,
+	COLLISION_PADDING_DEGREES,
 	DEFAULT_COLLISION_CONFIG,
+	signedAngularSpeedDegreesPerSecond,
+	targetAngleAtElapsed,
+	localImpactAngleAtElapsed,
+	computeMinAngularSeparationDegrees,
+	collisionConfigForLevel,
 	createInitialGameState,
-	advanceTargetAngle,
 	resetGameState,
+	tryBeginThrow,
+	resolveThrowImpact,
+	advanceTargetAngle,
 } from './gameEngine'

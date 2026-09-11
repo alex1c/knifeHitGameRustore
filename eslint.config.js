@@ -12,4 +12,11 @@ module.exports = defineConfig([
 			'import/no-unresolved': 'off',
 		},
 	},
+	{
+		// Reanimated SharedValue `.value` writes are intentional mutation APIs.
+		files: ['src/hooks/useGameController.ts', 'src/components/GameCanvas.tsx'],
+		rules: {
+			'react-hooks/immutability': 'off',
+		},
+	},
 ])

@@ -36,10 +36,17 @@ npm run lint
 
 ## Architecture
 
-- `src/game/math` — pure angle helpers for future collisions (no UI).
-- `src/game/engine` — deterministic state helpers driven by elapsed time.
-- `src/game/models` + `src/game/config` — domain types and prototype levels.
-- `src/components/GameCanvas.tsx` — Skia presentation only; animation uses Reanimated shared values, not per-frame React state.
-- `src/screens` + `src/navigation` — Home, Game, Levels, Learning, Settings.
+Core gameplay (Phase 2) is playable: tap → flight → impact → attach or loss → win / instant retry.
 
-Gameplay throw/collision loop arrives in Phase 2. Ads, signing, and RuStore upload are out of scope for foundation.
+**Authoritative timing:** target rotation is `targetAngleAtElapsed(level, elapsedMs)`.
+Rendering and collision both use that formula. Impact angle is fixed at throw start
+as `throwStartElapsedMs + FLIGHT_DURATION_MS` (not a late animation clock read).
+
+**Separation:**
+
+- `src/game/math` — angle helpers and world↔local transforms (no UI)
+- `src/game/engine` — throw / impact / win / loss state transitions
+- `src/components/GameCanvas.tsx` — Skia presentation; Reanimated shared values for rotation/flight (no React state per frame)
+- `src/hooks/useGameController.ts` — semantic React updates only
+
+Ads, economy, bosses, signing, and RuStore upload are out of scope.

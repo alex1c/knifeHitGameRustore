@@ -3,8 +3,16 @@
  * Kept free of UI / Skia dependencies so gameplay rules stay testable.
  */
 
-/** Lifecycle of a single play session. */
-export type GameStatus = 'idle' | 'playing' | 'won' | 'lost'
+/**
+ * Lifecycle of a single play session.
+ * `projectileFlying` blocks additional throws until impact resolves.
+ */
+export type GameStatus =
+	| 'ready'
+	| 'playing'
+	| 'projectileFlying'
+	| 'won'
+	| 'lost'
 
 /** Rotation direction of the circular target. */
 export type TargetDirection = 'clockwise' | 'counterClockwise'
@@ -22,39 +30,62 @@ export interface LevelConfig {
 	/** Target angular speed in degrees per second. */
 	initialSpeed: number
 	direction: TargetDirection
-	/** Abstract target radius used by future collision math. */
+	/** Abstract target radius used by collision geometry. */
 	targetRadius: number
-	/** Abstract projectile half-size (angular footprint uses this later). */
+	/**
+	 * Full projectile width in the same abstract units as targetRadius.
+	 * Used to derive angular collision separation.
+	 */
 	projectileSize: number
-	/** Pre-attached obstacles as absolute angles in degrees [0, 360). */
+	/** Pre-attached obstacles as LOCAL target angles in degrees [0, 360). */
 	initialObstacles: number[]
 }
 
 /** A projectile that has already stuck to the target rim. */
 export interface AttachedProjectile {
 	id: string
-	/** Angle on the target circle in degrees, normalized to [0, 360). */
+	/**
+	 * LOCAL angle on the target circle in degrees [0, 360).
+	 * Convention: 0 = top, 90 = right, 180 = bottom, 270 = left
+	 * (before applying target rotation).
+	 */
 	angle: number
 }
 
 /**
  * Deterministic snapshot of an active round.
- * Visual presentation derives from this; it must not depend on Skia frames.
+ * Target orientation is NOT stored here — it is derived from elapsed time.
  */
 export interface GameState {
 	status: GameStatus
 	levelId: string
 	remainingThrows: number
-	/**
-	 * Current target orientation in degrees.
-	 * Advanced by the engine from elapsed time, not from paint FPS.
-	 */
-	targetAngle: number
 	attachedProjectiles: AttachedProjectile[]
+	/** Elapsed ms (from round start) when the active throw began. */
+	throwStartElapsedMs: number | null
+	/**
+	 * Logical impact elapsed ms fixed at throw start.
+	 * Collision MUST use this, never a late animation callback clock read.
+	 */
+	impactElapsedMs: number | null
+	/** Next id suffix for player-attached projectiles. */
+	nextProjectileId: number
+	/** Local angle of the last impact (hit or miss) for feedback. */
+	lastImpactLocalAngle: number | null
 }
 
-/** Tunable collision threshold in degrees (half-gap between centers). */
+/** Tunable collision threshold in degrees (center-to-center). */
 export interface CollisionConfig {
 	/** Minimum angular separation between projectile centers. */
 	minAngularSeparationDegrees: number
 }
+
+/** Result of attempting to start a throw. */
+export type BeginThrowResult =
+	| { accepted: false; reason: 'blocked' }
+	| {
+			accepted: true
+			state: GameState
+			throwStartElapsedMs: number
+			impactElapsedMs: number
+	  }

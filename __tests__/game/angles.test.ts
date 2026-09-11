@@ -1,12 +1,15 @@
 /**
- * Unit tests for pure angular math used by future collision detection.
+ * Unit tests for pure angular math and coordinate transforms.
  */
 
 import {
 	hasAngularCollisionWithAny,
 	isAngularCollision,
+	localAngleToWorldAngle,
 	normalizeAngle,
 	shortestAngularDistance,
+	WORLD_IMPACT_ANGLE_DEGREES,
+	worldAngleToLocalAngle,
 } from '../../src/game/math/angles'
 
 describe('normalizeAngle', () => {
@@ -67,14 +70,39 @@ describe('isAngularCollision', () => {
 
 describe('hasAngularCollisionWithAny', () => {
 	it('returns true when any occupied angle collides', () => {
-		expect(
-			hasAngularCollisionWithAny(5, [100, 350], 18),
-		).toBe(true)
+		expect(hasAngularCollisionWithAny(5, [100, 350], 18)).toBe(true)
 	})
 
 	it('returns false when candidate is clear', () => {
+		expect(hasAngularCollisionWithAny(90, [0, 180], 18)).toBe(false)
+	})
+})
+
+describe('world ↔ local angle transforms', () => {
+	it('maps bottom world impact into local space for zero rotation', () => {
 		expect(
-			hasAngularCollisionWithAny(90, [0, 180], 18),
-		).toBe(false)
+			worldAngleToLocalAngle(WORLD_IMPACT_ANGLE_DEGREES, 0),
+		).toBe(180)
+	})
+
+	it('accounts for clockwise target rotation', () => {
+		// Target rotated 30° CW → bottom world point is local 150°.
+		expect(worldAngleToLocalAngle(180, 30)).toBe(150)
+	})
+
+	it('accounts for counter-clockwise (negative) rotation via normalize', () => {
+		expect(worldAngleToLocalAngle(180, 350)).toBe(190)
+	})
+
+	it('wraps across 0/360', () => {
+		expect(worldAngleToLocalAngle(10, 30)).toBe(340)
+		expect(worldAngleToLocalAngle(0, 10)).toBe(350)
+	})
+
+	it('round-trips with localAngleToWorldAngle', () => {
+		const local = 42
+		const rotation = 275
+		const world = localAngleToWorldAngle(local, rotation)
+		expect(worldAngleToLocalAngle(world, rotation)).toBe(local)
 	})
 })
