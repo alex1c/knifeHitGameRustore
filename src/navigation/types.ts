@@ -1,5 +1,5 @@
 /**
- * Root navigation param list for the Phase 1 screen stack.
+ * Root navigation param list.
  */
 export type RootStackParamList = {
 	Home: undefined
@@ -7,4 +7,7 @@ export type RootStackParamList = {
 	Levels: undefined
 	Learning: undefined
 	Settings: undefined
+	Endless: undefined
+	Daily: undefined
+	Statistics: undefined
 }

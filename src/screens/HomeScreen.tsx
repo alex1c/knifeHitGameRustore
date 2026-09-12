@@ -1,9 +1,11 @@
 /**
- * Home screen — polished arcade start with progress hint.
+ * Home — campaign continue + endless/daily cards + stats.
  */
 
-import { StyleSheet, Text, View } from 'react-native'
+import { useCallback } from 'react'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
+import { useFocusEffect } from '@react-navigation/native'
 
 import {
 	getProjectileTheme,
@@ -14,15 +16,30 @@ import { Screen } from '../components/Screen'
 import { PRODUCTION_LEVELS } from '../game/config/levels'
 import type { RootStackParamList } from '../navigation/types'
 import { getContinueLevelId } from '../storage/progression'
+import { useModesContext } from '../storage/ModesProvider'
 import { useProgressionContext } from '../storage/ProgressionProvider'
 import { useSettingsContext } from '../storage/SettingsProvider'
-import { colors, radii, spacing, typography } from '../theme'
+import { colors, radii, spacing, touchTarget, typography } from '../theme'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>
 
 export function HomeScreen ({ navigation }: Props) {
 	const { progression, ready } = useProgressionContext()
 	const { settings } = useSettingsContext()
+	const {
+		endless,
+		daily,
+		isTodayDailyCompleted,
+		ready: modesReady,
+		refreshDailyDateKey,
+	} = useModesContext()
+
+	useFocusEffect(
+		useCallback(() => {
+			refreshDailyDateKey()
+		}, [refreshDailyDateKey]),
+	)
+
 	const continueId = getContinueLevelId(progression)
 	const hasProgress =
 		progression.highestUnlockedLevel > 1 ||
@@ -36,7 +53,7 @@ export function HomeScreen ({ navigation }: Props) {
 	)
 
 	return (
-		<Screen style={styles.container}>
+		<Screen scroll style={styles.container}>
 			<View style={styles.hero}>
 				<View style={styles.previewRow}>
 					<View
@@ -45,40 +62,61 @@ export function HomeScreen ({ navigation }: Props) {
 						<View style={styles.targetCore} />
 					</View>
 					<View
-						style={[styles.projectilePreview, { backgroundColor: projectile.fill }]}
+						style={[
+							styles.projectilePreview,
+							{ backgroundColor: projectile.fill },
+						]}
 					/>
 				</View>
 				<Text style={styles.brand}>Точный бросок</Text>
 				<Text style={styles.subtitle}>
 					Точность и тайминг. Попадите в свободное место мишени.
 				</Text>
-				{ready ? (
-					<Text style={styles.progress}>
-						Прогресс: {completedCount} / {PRODUCTION_LEVELS.length}
-					</Text>
-				) : null}
-				{ready && hasProgress ? (
-					<Text style={styles.continueHint}>
-						Продолжить: уровень {progression.highestUnlockedLevel}
-					</Text>
-				) : null}
 			</View>
 
 			<View style={styles.actions}>
 				<PrimaryButton
-					label={hasProgress ? 'Продолжить' : 'Играть'}
+					label={hasProgress ? 'Продолжить кампанию' : 'Играть'}
 					onPress={() =>
 						navigation.navigate('Game', { levelId: continueId })
 					}
 				/>
-				<PrimaryButton
-					label="Уровни"
-					variant="secondary"
+
+				<ModeCard
+					title="Кампания"
+					subtitle={
+						ready
+							? `${completedCount} / ${PRODUCTION_LEVELS.length}`
+							: '…'
+					}
 					onPress={() => navigation.navigate('Levels')}
+				/>
+				<ModeCard
+					title="Бесконечный"
+					subtitle={
+						modesReady ? `Рекорд: ${endless.bestScore}` : 'Рекорд: …'
+					}
+					onPress={() => navigation.navigate('Endless')}
+				/>
+				<ModeCard
+					title="Испытание дня"
+					subtitle={
+						modesReady
+							? `${isTodayDailyCompleted ? 'Выполнено' : 'Не выполнено'} · Серия ${daily.currentStreak}`
+							: '…'
+					}
+					accent
+					onPress={() => navigation.navigate('Daily')}
+				/>
+
+				<PrimaryButton
+					label="Статистика"
+					variant="secondary"
+					onPress={() => navigation.navigate('Statistics')}
 				/>
 				<PrimaryButton
 					label="Обучение"
-					variant="secondary"
+					variant="ghost"
 					onPress={() => navigation.navigate('Learning')}
 				/>
 				<PrimaryButton
@@ -91,14 +129,41 @@ export function HomeScreen ({ navigation }: Props) {
 	)
 }
 
+function ModeCard ({
+	title,
+	subtitle,
+	onPress,
+	accent,
+}: {
+	title: string
+	subtitle: string
+	onPress: () => void
+	accent?: boolean
+}) {
+	return (
+		<Pressable
+			accessibilityRole="button"
+			onPress={onPress}
+			style={({ pressed }) => [
+				styles.card,
+				accent && styles.cardAccent,
+				pressed && styles.cardPressed,
+			]}
+		>
+			<Text style={styles.cardTitle}>{title}</Text>
+			<Text style={styles.cardSubtitle}>{subtitle}</Text>
+		</Pressable>
+	)
+}
+
 const styles = StyleSheet.create({
 	container: {
 		justifyContent: 'space-between',
 	},
 	hero: {
-		flex: 1,
-		justifyContent: 'center',
 		gap: spacing.md,
+		marginBottom: spacing.lg,
+		paddingTop: spacing.md,
 	},
 	previewRow: {
 		flexDirection: 'row',
@@ -139,18 +204,34 @@ const styles = StyleSheet.create({
 		lineHeight: 24,
 		maxWidth: 320,
 	},
-	progress: {
-		color: colors.textMuted,
-		fontSize: typography.caption,
-		fontWeight: '600',
-	},
-	continueHint: {
-		color: colors.accent,
-		fontSize: typography.body,
-		fontWeight: '600',
-	},
 	actions: {
 		gap: spacing.sm,
 		paddingBottom: spacing.sm,
+	},
+	card: {
+		minHeight: touchTarget.minHeight,
+		backgroundColor: colors.surface,
+		borderRadius: radii.md,
+		borderWidth: 1,
+		borderColor: colors.border,
+		paddingHorizontal: spacing.md,
+		paddingVertical: spacing.sm,
+		justifyContent: 'center',
+	},
+	cardAccent: {
+		borderColor: colors.primary,
+	},
+	cardPressed: {
+		opacity: 0.85,
+	},
+	cardTitle: {
+		color: colors.text,
+		fontSize: typography.body,
+		fontWeight: '700',
+	},
+	cardSubtitle: {
+		color: colors.textMuted,
+		fontSize: typography.caption,
+		marginTop: 2,
 	},
 })

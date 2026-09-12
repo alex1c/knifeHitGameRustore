@@ -10,8 +10,8 @@ Android arcade precision game for RuStore.
 - TypeScript (strict)
 - React Native Skia
 - React Navigation
-- AsyncStorage (progression + settings)
-- expo-av / expo-haptics (game feel)
+- AsyncStorage (progression + settings + modes/stats)
+- expo-audio / expo-haptics (game feel)
 - Jest + ESLint
 
 ## Setup
@@ -36,15 +36,23 @@ npm run typecheck
 npm run lint
 ```
 
+## Modes
+
+- **Campaign** — 30 levels, local unlock progression, milestone themes.
+- **Endless** — one-hit-ends-run scoring with waves; local best score.
+- **Daily Challenge** — deterministic challenge from local `YYYY-MM-DD` date key (offline, no server).
+- **Statistics / streak** — local counters; daily streak from consecutive calendar completions.
+
 ## Architecture
 
-- **30 campaign levels** with deterministic looping rotation timelines.
 - **Authoritative timing:** rendering and collision sample the same compiled timeline.
-- **Progression:** local unlock/completed storage.
+- **Shared engine:** Campaign / Endless / Daily reuse throw, collision, and timeline core.
+- **Progression + settings + modes:** versioned AsyncStorage schemas with sanitize fallbacks.
 - **Game feel:** presentation events → short SFX, haptics, Skia particles (no rule changes).
 - **Visual identity:** own spike/pin/dart projectiles and range/aurora/ember targets.
   Extra styles unlock at milestones 10 / 20 (no shop/economy).
-- **Validation:** `validateLevelCollection(PRODUCTION_LEVELS)`.
-- **Dev QA (`__DEV__` only):** unlock-all / reset on Levels.
+- **Validation:** `validateLevelCollection(PRODUCTION_LEVELS)` plus generated endless/daily configs.
+- **Dev QA (`__DEV__` only):** unlock-all / reset; endless band jump; daily date override / streak QA.
 
 Background AppState freezes round elapsed; audio stops while inactive.
+No ads, economy, accounts, or online leaderboards in current phases.

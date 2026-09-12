@@ -10,13 +10,16 @@ import { StyleSheet } from 'react-native'
 
 import { bindAudioLifecycle, initAudio } from './src/feel/audio'
 import { useFeelFeedback } from './src/feel/useFeelFeedback'
+import { useStatsFromFeel } from './src/hooks/useStatsFromFeel'
 import { RootNavigator } from './src/navigation/RootNavigator'
+import { ModesProvider } from './src/storage/ModesProvider'
 import { ProgressionProvider } from './src/storage/ProgressionProvider'
 import { SettingsProvider } from './src/storage/SettingsProvider'
 import { colors } from './src/theme'
 
 function FeelBootstrap ({ children }: { children: ReactNode }) {
 	useFeelFeedback()
+	useStatsFromFeel()
 	useEffect(() => {
 		void initAudio()
 		return bindAudioLifecycle()
@@ -30,10 +33,12 @@ export default function App () {
 			<SafeAreaProvider>
 				<SettingsProvider>
 					<ProgressionProvider>
-						<FeelBootstrap>
-							<StatusBar style="light" />
-							<RootNavigator />
-						</FeelBootstrap>
+						<ModesProvider>
+							<FeelBootstrap>
+								<StatusBar style="light" />
+								<RootNavigator />
+							</FeelBootstrap>
+						</ModesProvider>
 					</ProgressionProvider>
 				</SettingsProvider>
 			</SafeAreaProvider>

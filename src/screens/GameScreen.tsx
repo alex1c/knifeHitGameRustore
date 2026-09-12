@@ -19,6 +19,7 @@ import { PrimaryButton } from '../components/PrimaryButton'
 import { getNextLevelId } from '../game/config/levels'
 import { useGameController } from '../hooks/useGameController'
 import type { RootStackParamList } from '../navigation/types'
+import { useModesContext } from '../storage/ModesProvider'
 import { useProgressionContext } from '../storage/ProgressionProvider'
 import { useSettingsContext } from '../storage/SettingsProvider'
 import { colors, radii, spacing, typography } from '../theme'
@@ -43,6 +44,7 @@ interface GameSessionProps {
 function GameSession ({ levelId, navigation }: GameSessionProps) {
 	const insets = useSafeAreaInsets()
 	const { markLevelCompleted, progression } = useProgressionContext()
+	const { noteCampaignCompletedCount } = useModesContext()
 	const { settings } = useSettingsContext()
 	const recordedWinRef = useRef(false)
 	const [unlockToast, setUnlockToast] = useState<string | null>(null)
@@ -84,14 +86,20 @@ function GameSession ({ levelId, navigation }: GameSessionProps) {
 			return
 		}
 		recordedWinRef.current = true
-		void markLevelCompleted(level.displayNumber).then(() => {
+		void markLevelCompleted(level.displayNumber).then((next) => {
+			void noteCampaignCompletedCount(next.completedLevels.length)
 			const unlocked = themesUnlockedAtLevel(level.displayNumber)
 			if (unlocked.length > 0) {
 				setUnlockToast(`Новый стиль открыт: ${unlocked.join(', ')}`)
 				setTimeout(() => setUnlockToast(null), 2200)
 			}
 		})
-	}, [level.displayNumber, markLevelCompleted, state.status])
+	}, [
+		level.displayNumber,
+		markLevelCompleted,
+		noteCampaignCompletedCount,
+		state.status,
+	])
 
 	const showReadyProjectile =
 		state.status === 'playing' || state.status === 'ready'
