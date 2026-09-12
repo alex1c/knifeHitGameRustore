@@ -1,5 +1,5 @@
 /**
- * Learning / how-to-play section required by ForestMusic playbook.
+ * Learning / how-to-play — updated for Phase 3 target behaviors.
  */
 
 import { StyleSheet, Text, View } from 'react-native'
@@ -8,6 +8,8 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { PrimaryButton } from '../components/PrimaryButton'
 import { Screen } from '../components/Screen'
 import type { RootStackParamList } from '../navigation/types'
+import { getContinueLevelId } from '../storage/progression'
+import { useProgressionContext } from '../storage/ProgressionProvider'
 import { colors, radii, spacing, typography } from '../theme'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Learning'>
@@ -26,12 +28,19 @@ const LESSONS = [
 		body: 'Не задевайте уже закреплённые предметы.',
 	},
 	{
+		title: 'Ритм мишени',
+		body: 'Цель может менять скорость, останавливаться и менять направление. Используйте паузы и ритм.',
+	},
+	{
 		title: 'Победа',
 		body: 'Выполните все броски, чтобы пройти уровень.',
 	},
 ] as const
 
 export function LearningScreen ({ navigation }: Props) {
+	const { progression } = useProgressionContext()
+	const continueId = getContinueLevelId(progression)
+
 	return (
 		<Screen scroll>
 			<Text style={styles.title}>Обучение</Text>
@@ -53,7 +62,7 @@ export function LearningScreen ({ navigation }: Props) {
 
 			<PrimaryButton
 				label="К игре"
-				onPress={() => navigation.navigate('Game', { levelId: 'level-1' })}
+				onPress={() => navigation.navigate('Game', { levelId: continueId })}
 			/>
 			<View style={styles.spacer} />
 			<PrimaryButton

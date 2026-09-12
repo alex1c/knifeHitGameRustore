@@ -1,7 +1,6 @@
 /**
  * Game session controller: semantic React state + shared timing for Skia.
- * Background/inactive AppState freezes authoritative elapsed time so the
- * target does not keep spinning while the app is away.
+ * Presentation events are emitted after logical decisions — never before.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -23,7 +22,10 @@ import {
 	tryBeginThrow,
 } from '../game/engine'
 import { freezeElapsed, resumeRoundStart } from '../game/engine/roundClock'
+import { emitFeel } from '../feel/events'
 import type { GameState, LevelConfig } from '../game/models'
+
+export type FxKind = 'none' | 'hit' | 'collision' | 'win'
 
 export interface GameController {
 	level: LevelConfig
@@ -33,8 +35,14 @@ export interface GameController {
 	isPaused: SharedValue<number>
 	frozenElapsedMs: SharedValue<number>
 	flightProgress: SharedValue<number>
+	/** 0–1 pulse for target / particle bursts (Skia-driven). */
+	fxProgress: SharedValue<number>
+	fxKind: FxKind
+	fxLocalAngle: number | null
 	roundId: number
 	collisionFlashVisible: boolean
+	/** True after short celebratory delay on win. */
+	showWinOverlay: boolean
 	handleTap: () => void
 	handleRetry: () => void
 	readElapsedMs: () => number
@@ -47,11 +55,15 @@ export function useGameController (levelId: string): GameController {
 	const isPaused = useSharedValue(0)
 	const frozenElapsedMs = useSharedValue(0)
 	const flightProgress = useSharedValue(0)
+	const fxProgress = useSharedValue(0)
 	const [state, setState] = useState<GameState>(() =>
 		createInitialGameState(level, 'playing'),
 	)
 	const [roundId, setRoundId] = useState(0)
 	const [collisionFlashVisible, setCollisionFlashVisible] = useState(false)
+	const [fxKind, setFxKind] = useState<FxKind>('none')
+	const [fxLocalAngle, setFxLocalAngle] = useState<number | null>(null)
+	const [showWinOverlay, setShowWinOverlay] = useState(false)
 
 	const stateRef = useRef(state)
 	const levelRef = useRef(level)
@@ -64,6 +76,17 @@ export function useGameController (levelId: string): GameController {
 	useEffect(() => {
 		levelRef.current = level
 	}, [level])
+
+	useEffect(() => {
+		emitFeel({ type: 'levelStarted', displayNumber: level.displayNumber })
+	}, [level.displayNumber, levelId])
+
+	const playFx = useCallback((kind: FxKind, angle: number | null) => {
+		setFxKind(kind)
+		setFxLocalAngle(angle)
+		fxProgress.value = 0
+		fxProgress.value = withTiming(1, { duration: kind === 'win' ? 420 : 220 })
+	}, [fxProgress])
 
 	const readElapsedMs = useCallback(() => {
 		if (isPaused.value === 1) {
@@ -118,6 +141,12 @@ export function useGameController (levelId: string): GameController {
 		flightProgress.value = next.status === 'lost' ? 1 : 0
 
 		if (next.status === 'lost') {
+			emitFeel({
+				type: 'collision',
+				localAngle: next.lastImpactLocalAngle,
+				displayNumber: currentLevel.displayNumber,
+			})
+			playFx('collision', next.lastImpactLocalAngle)
 			setCollisionFlashVisible(true)
 			setTimeout(() => {
 				setCollisionFlashVisible(false)
@@ -125,10 +154,27 @@ export function useGameController (levelId: string): GameController {
 			return
 		}
 
-		if (next.status === 'playing') {
-			throwGateRef.current = false
+		if (next.status === 'won') {
+			emitFeel({
+				type: 'levelWon',
+				localAngle: next.lastImpactLocalAngle,
+				displayNumber: currentLevel.displayNumber,
+			})
+			playFx('win', next.lastImpactLocalAngle)
+			setTimeout(() => {
+				setShowWinOverlay(true)
+			}, 350)
+			return
 		}
-	}, [flightProgress])
+
+		emitFeel({
+			type: 'successfulHit',
+			localAngle: next.lastImpactLocalAngle,
+			displayNumber: currentLevel.displayNumber,
+		})
+		playFx('hit', next.lastImpactLocalAngle)
+		throwGateRef.current = false
+	}, [flightProgress, playFx])
 
 	const handleTap = useCallback(() => {
 		if (throwGateRef.current) {
@@ -147,6 +193,7 @@ export function useGameController (levelId: string): GameController {
 		throwGateRef.current = true
 		stateRef.current = result.state
 		setState(result.state)
+		emitFeel({ type: 'throwStarted', displayNumber: levelRef.current.displayNumber })
 
 		flightProgress.value = 0
 		flightProgress.value = withTiming(
@@ -164,15 +211,20 @@ export function useGameController (levelId: string): GameController {
 	const handleRetry = useCallback(() => {
 		throwGateRef.current = false
 		flightProgress.value = 0
+		fxProgress.value = 0
 		isPaused.value = 0
 		roundStartClock.value = clock.value
 		frozenElapsedMs.value = 0
 		setCollisionFlashVisible(false)
+		setShowWinOverlay(false)
+		setFxKind('none')
+		setFxLocalAngle(null)
 		const next = resetGameState(levelRef.current)
 		stateRef.current = next
 		setState(next)
 		setRoundId((id) => id + 1)
-	}, [clock, flightProgress, frozenElapsedMs, isPaused, roundStartClock])
+		emitFeel({ type: 'retry', displayNumber: levelRef.current.displayNumber })
+	}, [clock, flightProgress, frozenElapsedMs, fxProgress, isPaused, roundStartClock])
 
 	return {
 		level,
@@ -182,8 +234,12 @@ export function useGameController (levelId: string): GameController {
 		isPaused,
 		frozenElapsedMs,
 		flightProgress,
+		fxProgress,
+		fxKind,
+		fxLocalAngle,
 		roundId,
 		collisionFlashVisible,
+		showWinOverlay,
 		handleTap,
 		handleRetry,
 		readElapsedMs,

@@ -1,10 +1,11 @@
 /**
- * Campaign level grid — 30 levels with locked / unlocked / completed states.
+ * Campaign level grid with milestone emphasis and unlock states.
  */
 
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 
+import { isMilestoneLevel } from '../appearance/themes'
 import { PrimaryButton } from '../components/PrimaryButton'
 import { Screen } from '../components/Screen'
 import { PRODUCTION_LEVELS } from '../game/config/levels'
@@ -40,16 +41,19 @@ export function LevelsScreen ({ navigation }: Props) {
 						progression,
 						level.displayNumber,
 					)
+					const milestone = isMilestoneLevel(level.displayNumber)
 					return (
 						<Pressable
 							key={level.id}
 							accessibilityRole="button"
 							accessibilityState={{ disabled: !unlocked }}
+							accessibilityLabel={`Уровень ${level.displayNumber}${milestone ? ', веха' : ''}${completed ? ', пройден' : ''}${!unlocked ? ', закрыт' : ''}`}
 							disabled={!unlocked}
 							style={({ pressed }) => [
 								styles.cell,
 								!unlocked && styles.cellLocked,
 								completed && styles.cellCompleted,
+								milestone && styles.cellMilestone,
 								pressed && unlocked && styles.cellPressed,
 							]}
 							onPress={() => {
@@ -63,18 +67,22 @@ export function LevelsScreen ({ navigation }: Props) {
 								style={[
 									styles.cellNumber,
 									!unlocked && styles.cellNumberLocked,
+									milestone && styles.cellNumberMilestone,
 								]}
 							>
 								{level.displayNumber}
 							</Text>
 							<View style={styles.cellBadge}>
 								{completed ? (
-									<View style={styles.completedMark} />
+									<Text style={styles.badgeText}>✓</Text>
 								) : null}
 								{!unlocked ? (
-									<View style={styles.lockMark} />
+									<Text style={styles.badgeTextMuted}>•</Text>
 								) : null}
 							</View>
+							{milestone ? (
+								<View style={styles.milestoneBar} />
+							) : null}
 							{__DEV__ ? (
 								<Text style={styles.devMeta}>
 									{compileLevelTimeline(level).segmentCount}s
@@ -153,6 +161,11 @@ const styles = StyleSheet.create({
 	},
 	cellCompleted: {
 		borderColor: colors.accent,
+		backgroundColor: colors.surfaceElevated,
+	},
+	cellMilestone: {
+		borderWidth: 2,
+		borderColor: colors.primary,
 	},
 	cellPressed: {
 		opacity: 0.85,
@@ -165,24 +178,31 @@ const styles = StyleSheet.create({
 	cellNumberLocked: {
 		color: colors.textMuted,
 	},
+	cellNumberMilestone: {
+		color: colors.primary,
+	},
 	cellBadge: {
 		position: 'absolute',
-		top: 6,
+		top: 4,
 		right: 6,
-		flexDirection: 'row',
-		gap: 4,
 	},
-	completedMark: {
-		width: 8,
-		height: 8,
-		borderRadius: 4,
-		backgroundColor: colors.accent,
+	badgeText: {
+		color: colors.accent,
+		fontSize: 12,
+		fontWeight: '700',
 	},
-	lockMark: {
-		width: 8,
-		height: 8,
+	badgeTextMuted: {
+		color: colors.textMuted,
+		fontSize: 14,
+		fontWeight: '700',
+	},
+	milestoneBar: {
+		position: 'absolute',
+		bottom: 5,
+		width: '55%',
+		height: 3,
 		borderRadius: 2,
-		backgroundColor: colors.textMuted,
+		backgroundColor: colors.primary,
 	},
 	devMeta: {
 		position: 'absolute',

@@ -1,18 +1,26 @@
 /**
- * Playable Game screen — core throw loop + campaign progression hooks.
+ * Playable Game screen — core loop + feel + theme presentation.
  */
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import {
+	getProjectileTheme,
+	getTargetTheme,
+	resolveProjectileThemeId,
+	resolveTargetThemeId,
+	themesUnlockedAtLevel,
+} from '../appearance/themes'
 import { GameCanvas } from '../components/GameCanvas'
 import { PrimaryButton } from '../components/PrimaryButton'
 import { getNextLevelId } from '../game/config/levels'
 import { useGameController } from '../hooks/useGameController'
 import type { RootStackParamList } from '../navigation/types'
 import { useProgressionContext } from '../storage/ProgressionProvider'
+import { useSettingsContext } from '../storage/SettingsProvider'
 import { colors, radii, spacing, typography } from '../theme'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Game'>
@@ -34,8 +42,10 @@ interface GameSessionProps {
 
 function GameSession ({ levelId, navigation }: GameSessionProps) {
 	const insets = useSafeAreaInsets()
-	const { markLevelCompleted } = useProgressionContext()
+	const { markLevelCompleted, progression } = useProgressionContext()
+	const { settings } = useSettingsContext()
 	const recordedWinRef = useRef(false)
+	const [unlockToast, setUnlockToast] = useState<string | null>(null)
 	const {
 		level,
 		state,
@@ -44,17 +54,43 @@ function GameSession ({ levelId, navigation }: GameSessionProps) {
 		isPaused,
 		frozenElapsedMs,
 		flightProgress,
+		fxProgress,
+		fxKind,
+		fxLocalAngle,
 		collisionFlashVisible,
+		showWinOverlay,
 		handleTap,
 		handleRetry,
 	} = useGameController(levelId)
+
+	const projectileTheme = useMemo(() => {
+		const id = resolveProjectileThemeId(
+			settings.projectileThemeId,
+			progression.completedLevels,
+		)
+		return getProjectileTheme(id)
+	}, [progression.completedLevels, settings.projectileThemeId])
+
+	const targetTheme = useMemo(() => {
+		const id = resolveTargetThemeId(
+			settings.targetThemeId,
+			progression.completedLevels,
+		)
+		return getTargetTheme(id)
+	}, [progression.completedLevels, settings.targetThemeId])
 
 	useEffect(() => {
 		if (state.status !== 'won' || recordedWinRef.current) {
 			return
 		}
 		recordedWinRef.current = true
-		void markLevelCompleted(level.displayNumber)
+		void markLevelCompleted(level.displayNumber).then(() => {
+			const unlocked = themesUnlockedAtLevel(level.displayNumber)
+			if (unlocked.length > 0) {
+				setUnlockToast(`Новый стиль открыт: ${unlocked.join(', ')}`)
+				setTimeout(() => setUnlockToast(null), 2200)
+			}
+		})
 	}, [level.displayNumber, markLevelCompleted, state.status])
 
 	const showReadyProjectile =
@@ -64,7 +100,6 @@ function GameSession ({ levelId, navigation }: GameSessionProps) {
 		(state.status === 'lost' && collisionFlashVisible)
 	const canThrow = state.status === 'playing'
 	const showLossOverlay = state.status === 'lost' && !collisionFlashVisible
-	const showWinOverlay = state.status === 'won'
 	const nextLevelId = getNextLevelId(level.id)
 	const isCampaignComplete = showWinOverlay && nextLevelId === null
 
@@ -117,15 +152,22 @@ function GameSession ({ levelId, navigation }: GameSessionProps) {
 					isPaused={isPaused}
 					frozenElapsedMs={frozenElapsedMs}
 					flightProgress={flightProgress}
+					fxProgress={fxProgress}
+					fxKind={fxKind}
+					fxLocalAngle={fxLocalAngle}
+					projectileTheme={projectileTheme}
+					targetTheme={targetTheme}
 					showReadyProjectile={showReadyProjectile}
 					showFlyingProjectile={showFlyingProjectile}
-					collisionLocalAngle={state.lastImpactLocalAngle}
 					collisionFlashVisible={collisionFlashVisible}
 				/>
 
 				<View style={styles.ammoRow}>
 					{Array.from({ length: state.remainingThrows }).map((_, index) => (
-						<View key={`ammo-${index}`} style={styles.ammoDot} />
+						<View
+							key={`ammo-${index}`}
+							style={[styles.ammoDot, { backgroundColor: projectileTheme.fill }]}
+						/>
 					))}
 				</View>
 			</Pressable>
@@ -133,6 +175,12 @@ function GameSession ({ levelId, navigation }: GameSessionProps) {
 			<Text style={styles.hint}>
 				{canThrow ? 'Коснитесь экрана, чтобы бросить' : ' '}
 			</Text>
+
+			{unlockToast ? (
+				<View style={styles.toast} accessibilityLiveRegion="polite">
+					<Text style={styles.toastText}>{unlockToast}</Text>
+				</View>
+			) : null}
 
 			{showLossOverlay ? (
 				<View style={styles.overlay} pointerEvents="box-none">
@@ -142,6 +190,12 @@ function GameSession ({ levelId, navigation }: GameSessionProps) {
 							Предмет задел уже закреплённый.
 						</Text>
 						<PrimaryButton label="Ещё раз" onPress={handleRetry} />
+						<View style={styles.overlaySpacer} />
+						<PrimaryButton
+							label="Назад"
+							variant="ghost"
+							onPress={() => navigation.goBack()}
+						/>
 					</View>
 				</View>
 			) : null}
@@ -156,7 +210,7 @@ function GameSession ({ levelId, navigation }: GameSessionProps) {
 						</Text>
 						<Text style={styles.overlayBody}>
 							{isCampaignComplete
-								? 'Кампания из 30 уровней завершена.'
+								? 'Кампания из 30 уровней завершена. Отличная точность.'
 								: 'Все броски закреплены на мишени.'}
 						</Text>
 						<PrimaryButton
@@ -217,7 +271,6 @@ const styles = StyleSheet.create({
 		width: 10,
 		height: 10,
 		borderRadius: 5,
-		backgroundColor: colors.primary,
 	},
 	hint: {
 		textAlign: 'center',
@@ -225,6 +278,25 @@ const styles = StyleSheet.create({
 		fontSize: typography.caption,
 		marginTop: spacing.sm,
 		minHeight: 20,
+	},
+	toast: {
+		position: 'absolute',
+		top: 88,
+		alignSelf: 'center',
+		backgroundColor: colors.surfaceElevated,
+		borderColor: colors.accent,
+		borderWidth: 1,
+		borderRadius: radii.md,
+		paddingHorizontal: spacing.md,
+		paddingVertical: spacing.sm,
+		zIndex: 20,
+		maxWidth: '90%',
+	},
+	toastText: {
+		color: colors.text,
+		fontSize: typography.caption,
+		fontWeight: '600',
+		textAlign: 'center',
 	},
 	overlay: {
 		position: 'absolute',

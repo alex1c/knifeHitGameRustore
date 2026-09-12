@@ -10,7 +10,8 @@ Android arcade precision game for RuStore.
 - TypeScript (strict)
 - React Native Skia
 - React Navigation
-- AsyncStorage (local progression)
+- AsyncStorage (progression + settings)
+- expo-av / expo-haptics (game feel)
 - Jest + ESLint
 
 ## Setup
@@ -37,15 +38,13 @@ npm run lint
 
 ## Architecture
 
-- **30 campaign levels** with deterministic looping rotation timelines
-  (constant, speed ramps, pauses, reversals).
-- **Authoritative timing:** `targetRotationAtElapsed(level, elapsedMs)` —
-  rendering and collision sample the same compiled timeline.
-  Impact elapsed is fixed at throw start (`throwStart + flightMs`).
-- **Progression:** local versioned storage (`highestUnlockedLevel`, completed ids).
-  Fresh install unlocks Level 1 only.
-- **Validation:** `validateLevelCollection(PRODUCTION_LEVELS)` guards configs.
-- **Dev QA (`__DEV__` only):** unlock-all / reset on Levels screen.
+- **30 campaign levels** with deterministic looping rotation timelines.
+- **Authoritative timing:** rendering and collision sample the same compiled timeline.
+- **Progression:** local unlock/completed storage.
+- **Game feel:** presentation events → short SFX, haptics, Skia particles (no rule changes).
+- **Visual identity:** own spike/pin/dart projectiles and range/aurora/ember targets.
+  Extra styles unlock at milestones 10 / 20 (no shop/economy).
+- **Validation:** `validateLevelCollection(PRODUCTION_LEVELS)`.
+- **Dev QA (`__DEV__` only):** unlock-all / reset on Levels.
 
-`src/game/engine` = rules + timeline. `GameCanvas` = Skia presentation.
-Background AppState freezes round elapsed so the target does not spin while away.
+Background AppState freezes round elapsed; audio stops while inactive.
