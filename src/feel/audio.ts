@@ -1,16 +1,22 @@
 /**
- * Local SFX playback via expo-av.
+ * Local SFX playback via expo-audio.
  * Respects soundEnabled setting and stops on background.
  */
 
-import { Audio, type AVPlaybackSource } from 'expo-av'
+import {
+	createAudioPlayer,
+	setAudioModeAsync,
+	setIsAudioActiveAsync,
+	type AudioPlayer,
+	type AudioSource,
+} from 'expo-audio'
 import { AppState, type AppStateStatus } from 'react-native'
 
 import { getSettings } from '../storage/settings'
 
 type SfxId = 'throw' | 'hit' | 'fail' | 'win' | 'tap'
 
-const SOURCES: Record<SfxId, AVPlaybackSource> = {
+const SOURCES: Record<SfxId, AudioSource> = {
 	throw: require('../../assets/sounds/throw.wav'),
 	hit: require('../../assets/sounds/hit.wav'),
 	fail: require('../../assets/sounds/fail.wav'),
@@ -18,7 +24,7 @@ const SOURCES: Record<SfxId, AVPlaybackSource> = {
 	tap: require('../../assets/sounds/tap.wav'),
 }
 
-const sounds = new Map<SfxId, Audio.Sound>()
+const sounds = new Map<SfxId, AudioPlayer>()
 let ready = false
 let appActive = true
 
@@ -26,17 +32,17 @@ async function ensureReady (): Promise<void> {
 	if (ready) {
 		return
 	}
-	await Audio.setAudioModeAsync({
-		playsInSilentModeIOS: true,
-		staysActiveInBackground: false,
-		shouldDuckAndroid: true,
-		playThroughEarpieceAndroid: false,
+	await setAudioModeAsync({
+		playsInSilentMode: true,
+		interruptionMode: 'duckOthers',
+		shouldPlayInBackground: false,
+		shouldRouteThroughEarpiece: false,
 	})
 	for (const id of Object.keys(SOURCES) as SfxId[]) {
-		const { sound } = await Audio.Sound.createAsync(SOURCES[id], {
-			shouldPlay: false,
-			volume: 0.85,
+		const sound = createAudioPlayer(SOURCES[id], {
+			keepAudioSessionActive: true,
 		})
+		sound.volume = 0.85
 		sounds.set(id, sound)
 	}
 	ready = true
@@ -60,8 +66,7 @@ export async function playSfx (id: SfxId): Promise<void> {
 		if (!sound) {
 			return
 		}
-		await sound.setPositionAsync(0)
-		await sound.playAsync()
+		void sound.seekTo(0).then(() => sound.play())
 	} catch {
 		// Ignore playback errors — never block gameplay.
 	}
@@ -69,11 +74,7 @@ export async function playSfx (id: SfxId): Promise<void> {
 
 export async function stopAllSfx (): Promise<void> {
 	for (const sound of sounds.values()) {
-		try {
-			await sound.stopAsync()
-		} catch {
-			// ignore
-		}
+		sound.pause()
 	}
 }
 
@@ -82,6 +83,9 @@ export function bindAudioLifecycle (): () => void {
 		appActive = next === 'active'
 		if (!appActive) {
 			void stopAllSfx()
+			void setIsAudioActiveAsync(false)
+		} else {
+			void setIsAudioActiveAsync(true)
 		}
 	}
 	const sub = AppState.addEventListener('change', onChange)
@@ -92,11 +96,7 @@ export function bindAudioLifecycle (): () => void {
 
 export async function unloadAudio (): Promise<void> {
 	for (const sound of sounds.values()) {
-		try {
-			await sound.unloadAsync()
-		} catch {
-			// ignore
-		}
+		sound.remove()
 	}
 	sounds.clear()
 	ready = false
