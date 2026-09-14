@@ -6,6 +6,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 
 import { isMilestoneLevel } from '../appearance/themes'
+import { BannerAdSlot } from '../ads/BannerAdSlot'
 import { PrimaryButton } from '../components/PrimaryButton'
 import { Screen } from '../components/Screen'
 import { PRODUCTION_LEVELS } from '../game/config/levels'
@@ -119,6 +120,7 @@ export function LevelsScreen ({ navigation }: Props) {
 				variant="ghost"
 				onPress={() => navigation.goBack()}
 			/>
+			<BannerAdSlot placement="levels" />
 		</Screen>
 	)
 }

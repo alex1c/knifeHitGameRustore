@@ -1,5 +1,5 @@
 /**
- * Shared mode identifiers for Precision Throw.
+ * Shared mode identifiers for Меткий нож.
  */
 
 export type GameMode = 'campaign' | 'endless' | 'daily'

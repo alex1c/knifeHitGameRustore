@@ -24,6 +24,7 @@ import {
 import { freezeElapsed, resumeRoundStart } from '../game/engine/roundClock'
 import { emitFeel } from '../feel/events'
 import type { GameState, LevelConfig } from '../game/models'
+import { resumeAfterSecondChance } from '../ads/secondChance'
 
 export type FxKind = 'none' | 'hit' | 'collision' | 'win'
 
@@ -43,8 +44,12 @@ export interface GameController {
 	collisionFlashVisible: boolean
 	/** True after short celebratory delay on win. */
 	showWinOverlay: boolean
+	secondChanceUsedThisAttempt: boolean
 	handleTap: () => void
 	handleRetry: () => void
+	pauseForAd: () => void
+	resumeAfterAd: () => void
+	applySecondChanceResume: () => void
 	readElapsedMs: () => number
 }
 
@@ -64,10 +69,13 @@ export function useGameController (levelId: string): GameController {
 	const [fxKind, setFxKind] = useState<FxKind>('none')
 	const [fxLocalAngle, setFxLocalAngle] = useState<number | null>(null)
 	const [showWinOverlay, setShowWinOverlay] = useState(false)
+	const [secondChanceUsedThisAttempt, setSecondChanceUsedThisAttempt] =
+		useState(false)
 
 	const stateRef = useRef(state)
 	const levelRef = useRef(level)
 	const throwGateRef = useRef(false)
+	const adFreezeRef = useRef(false)
 
 	useEffect(() => {
 		stateRef.current = state
@@ -117,7 +125,9 @@ export function useGameController (levelId: string): GameController {
 	useEffect(() => {
 		const onChange = (next: AppStateStatus) => {
 			if (next === 'active') {
-				resumeRound()
+				if (!adFreezeRef.current) {
+					resumeRound()
+				}
 			} else {
 				pauseRound()
 			}
@@ -128,6 +138,28 @@ export function useGameController (levelId: string): GameController {
 		}
 	}, [pauseRound, resumeRound])
 
+	const pauseForAd = useCallback(() => {
+		adFreezeRef.current = true
+		pauseRound()
+	}, [pauseRound])
+
+	const resumeAfterAd = useCallback(() => {
+		adFreezeRef.current = false
+		resumeRound()
+	}, [resumeRound])
+
+	const applySecondChanceResume = useCallback(() => {
+		const next = resumeAfterSecondChance(stateRef.current)
+		stateRef.current = next
+		setState(next)
+		setSecondChanceUsedThisAttempt(true)
+		throwGateRef.current = false
+		flightProgress.value = 0
+		setCollisionFlashVisible(false)
+		setShowWinOverlay(false)
+		setFxKind('none')
+		setFxLocalAngle(null)
+	}, [flightProgress])
 	const applyImpact = useCallback((impactElapsedMs: number) => {
 		const current = stateRef.current
 		if (current.status !== 'projectileFlying') {
@@ -210,6 +242,7 @@ export function useGameController (levelId: string): GameController {
 
 	const handleRetry = useCallback(() => {
 		throwGateRef.current = false
+		adFreezeRef.current = false
 		flightProgress.value = 0
 		fxProgress.value = 0
 		isPaused.value = 0
@@ -217,6 +250,7 @@ export function useGameController (levelId: string): GameController {
 		frozenElapsedMs.value = 0
 		setCollisionFlashVisible(false)
 		setShowWinOverlay(false)
+		setSecondChanceUsedThisAttempt(false)
 		setFxKind('none')
 		setFxLocalAngle(null)
 		const next = resetGameState(levelRef.current)
@@ -240,8 +274,12 @@ export function useGameController (levelId: string): GameController {
 		roundId,
 		collisionFlashVisible,
 		showWinOverlay,
+		secondChanceUsedThisAttempt,
 		handleTap,
 		handleRetry,
+		pauseForAd,
+		resumeAfterAd,
+		applySecondChanceResume,
 		readElapsedMs,
 	}
 }

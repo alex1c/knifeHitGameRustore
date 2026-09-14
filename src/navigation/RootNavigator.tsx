@@ -1,5 +1,5 @@
 /**
- * Root stack navigator for Precision Throw.
+ * Root stack navigator for Меткий нож.
  */
 
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native'

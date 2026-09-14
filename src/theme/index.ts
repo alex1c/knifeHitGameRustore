@@ -1,5 +1,5 @@
 /**
- * Visual tokens for Precision Throw — range / target aesthetic.
+ * Visual tokens for Меткий нож — range / target aesthetic.
  * Geometric, high-contrast, no competitor branding.
  */
 

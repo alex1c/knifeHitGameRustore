@@ -1,8 +1,9 @@
 /**
  * Daily challenge screen — deterministic challenge for the local date key.
+ * No banners during active gameplay.
  */
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -13,6 +14,9 @@ import {
 	resolveProjectileThemeId,
 	resolveTargetThemeId,
 } from '../appearance/themes'
+import { useAdsContext } from '../ads/AdsProvider'
+import { useGameplayAdGuard } from '../ads/useGameplayAdGuard'
+import { trackEvent } from '../analytics/adapter'
 import { GameCanvas } from '../components/GameCanvas'
 import { PrimaryButton } from '../components/PrimaryButton'
 import { useDailyController } from '../hooks/useDailyController'
@@ -90,7 +94,47 @@ function DailySession ({
 	const insets = useSafeAreaInsets()
 	const { progression } = useProgressionContext()
 	const { settings } = useSettingsContext()
+	const { registerMeaningfulAction, tryShowInterstitial } = useAdsContext()
+	useGameplayAdGuard()
 	const controller = useDailyController(dateKey)
+	const startedRef = useRef(false)
+	const resultRef = useRef(false)
+
+	useEffect(() => {
+		if (startedRef.current) {
+			return
+		}
+		startedRef.current = true
+		trackEvent('daily_start', { mode: 'daily' })
+	}, [])
+
+	useEffect(() => {
+		if (resultRef.current) {
+			return
+		}
+		if (controller.showWinOverlay) {
+			resultRef.current = true
+			trackEvent('daily_complete', { mode: 'daily' })
+			registerMeaningfulAction()
+			void tryShowInterstitial()
+			return
+		}
+		if (controller.showLossOverlay) {
+			resultRef.current = true
+			trackEvent('daily_fail', { mode: 'daily' })
+			registerMeaningfulAction()
+		}
+	}, [
+		controller.showLossOverlay,
+		controller.showWinOverlay,
+		registerMeaningfulAction,
+		tryShowInterstitial,
+	])
+
+	const handleRetry = () => {
+		resultRef.current = false
+		controller.handleRetry()
+	}
 
 	const projectileTheme = useMemo(
 		() =>
@@ -222,7 +266,7 @@ function DailySession ({
 						<Text style={styles.body}>
 							Можно пробовать снова — challenge сегодня тот же.
 						</Text>
-						<PrimaryButton label="Ещё раз" onPress={controller.handleRetry} />
+						<PrimaryButton label="Ещё раз" onPress={handleRetry} />
 						<View style={styles.spacer} />
 						<PrimaryButton
 							label="На главную"
@@ -248,7 +292,7 @@ function DailySession ({
 						<PrimaryButton
 							label="Ещё раз"
 							variant="ghost"
-							onPress={controller.handleRetry}
+							onPress={handleRetry}
 						/>
 					</View>
 				</View>

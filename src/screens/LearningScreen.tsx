@@ -1,10 +1,12 @@
 /**
- * Learning / how-to-play — updated for Phase 3 target behaviors.
+ * Learning / how-to-play — modes overview for Меткий нож.
  */
 
+import { useEffect } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 
+import { trackEvent } from '../analytics/adapter'
 import { PrimaryButton } from '../components/PrimaryButton'
 import { Screen } from '../components/Screen'
 import type { RootStackParamList } from '../navigation/types'
@@ -52,6 +54,10 @@ const LESSONS = [
 export function LearningScreen ({ navigation }: Props) {
 	const { progression } = useProgressionContext()
 	const continueId = getContinueLevelId(progression)
+
+	useEffect(() => {
+		trackEvent('learning_open')
+	}, [])
 
 	return (
 		<Screen scroll>

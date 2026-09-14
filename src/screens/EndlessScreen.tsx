@@ -1,8 +1,9 @@
 /**
  * Endless mode screen — score / wave HUD + wave-clear banner.
+ * No banners during active gameplay.
  */
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -13,6 +14,9 @@ import {
 	resolveProjectileThemeId,
 	resolveTargetThemeId,
 } from '../appearance/themes'
+import { useAdsContext } from '../ads/AdsProvider'
+import { useGameplayAdGuard } from '../ads/useGameplayAdGuard'
+import { trackEvent } from '../analytics/adapter'
 import { GameCanvas } from '../components/GameCanvas'
 import { PrimaryButton } from '../components/PrimaryButton'
 import { useEndlessController } from '../hooks/useEndlessController'
@@ -29,6 +33,9 @@ export function EndlessScreen ({ navigation }: Props) {
 	const { progression } = useProgressionContext()
 	const { settings } = useSettingsContext()
 	const { resetEndlessBestForQa } = useModesContext()
+	const { registerMeaningfulAction, tryShowInterstitial } = useAdsContext()
+	useGameplayAdGuard()
+	const endedRef = useRef(false)
 	const {
 		run,
 		bestScore,
@@ -47,6 +54,45 @@ export function EndlessScreen ({ navigation }: Props) {
 		handleRetry,
 		jumpToBandForQa,
 	} = useEndlessController()
+
+	useEffect(() => {
+		trackEvent('endless_start', { mode: 'endless' })
+	}, [])
+
+	useEffect(() => {
+		if (!showLossOverlay || endedRef.current) {
+			return
+		}
+		endedRef.current = true
+		trackEvent('endless_end', {
+			mode: 'endless',
+			score: run.score,
+			wave: run.wave,
+			is_new_best: run.isNewRecord,
+		})
+		if (run.isNewRecord) {
+			trackEvent('endless_new_best', {
+				mode: 'endless',
+				score: run.score,
+				is_new_best: true,
+			})
+		}
+		registerMeaningfulAction()
+		void tryShowInterstitial()
+	}, [
+		registerMeaningfulAction,
+		run.isNewRecord,
+		run.score,
+		run.wave,
+		showLossOverlay,
+		tryShowInterstitial,
+	])
+
+	const handleRetryPress = () => {
+		endedRef.current = false
+		handleRetry()
+		trackEvent('endless_start', { mode: 'endless' })
+	}
 
 	const projectileTheme = useMemo(
 		() =>
@@ -164,7 +210,7 @@ export function EndlessScreen ({ navigation }: Props) {
 						{run.isNewRecord ? (
 							<Text style={styles.record}>Новый рекорд!</Text>
 						) : null}
-						<PrimaryButton label="Ещё раз" onPress={handleRetry} />
+						<PrimaryButton label="Ещё раз" onPress={handleRetryPress} />
 						<View style={styles.spacer} />
 						<PrimaryButton
 							label="На главную"

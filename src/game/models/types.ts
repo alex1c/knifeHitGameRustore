@@ -1,5 +1,5 @@
 /**
- * Core domain types for Precision Throw.
+ * Core domain types for Меткий нож.
  * Kept free of UI / Skia dependencies so gameplay rules stay testable.
  */
 

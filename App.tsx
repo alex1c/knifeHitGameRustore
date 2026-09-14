@@ -1,5 +1,5 @@
 /**
- * App entry — providers + audio/feel bootstrap.
+ * App entry — providers + audio/feel + analytics/ads bootstrap.
  */
 
 import { useEffect, type ReactNode } from 'react'
@@ -8,6 +8,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { StyleSheet } from 'react-native'
 
+import { AdsProvider } from './src/ads/AdsProvider'
+import { initAnalytics, trackEvent } from './src/analytics/adapter'
 import { bindAudioLifecycle, initAudio } from './src/feel/audio'
 import { useFeelFeedback } from './src/feel/useFeelFeedback'
 import { useStatsFromFeel } from './src/hooks/useStatsFromFeel'
@@ -27,6 +29,15 @@ function FeelBootstrap ({ children }: { children: ReactNode }) {
 	return children
 }
 
+function MonetizationBootstrap ({ children }: { children: ReactNode }) {
+	useEffect(() => {
+		// Non-blocking analytics activate + app_open.
+		initAnalytics()
+		trackEvent('app_open')
+	}, [])
+	return children
+}
+
 export default function App () {
 	return (
 		<GestureHandlerRootView style={styles.root}>
@@ -34,10 +45,14 @@ export default function App () {
 				<SettingsProvider>
 					<ProgressionProvider>
 						<ModesProvider>
-							<FeelBootstrap>
-								<StatusBar style="light" />
-								<RootNavigator />
-							</FeelBootstrap>
+							<AdsProvider>
+								<FeelBootstrap>
+									<MonetizationBootstrap>
+										<StatusBar style="light" />
+										<RootNavigator />
+									</MonetizationBootstrap>
+								</FeelBootstrap>
+							</AdsProvider>
 						</ModesProvider>
 					</ProgressionProvider>
 				</SettingsProvider>

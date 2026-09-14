@@ -11,6 +11,7 @@ import {
 	getProjectileTheme,
 	resolveProjectileThemeId,
 } from '../appearance/themes'
+import { BannerAdSlot } from '../ads/BannerAdSlot'
 import { PrimaryButton } from '../components/PrimaryButton'
 import { Screen } from '../components/Screen'
 import { PRODUCTION_LEVELS } from '../game/config/levels'
@@ -68,7 +69,7 @@ export function HomeScreen ({ navigation }: Props) {
 						]}
 					/>
 				</View>
-				<Text style={styles.brand}>Точный бросок</Text>
+				<Text style={styles.brand}>Меткий нож</Text>
 				<Text style={styles.subtitle}>
 					Точность и тайминг. Попадите в свободное место мишени.
 				</Text>
@@ -124,6 +125,10 @@ export function HomeScreen ({ navigation }: Props) {
 					variant="ghost"
 					onPress={() => navigation.navigate('Settings')}
 				/>
+			</View>
+
+			<View style={styles.bannerPad}>
+				<BannerAdSlot placement="home" />
 			</View>
 		</Screen>
 	)
@@ -207,6 +212,9 @@ const styles = StyleSheet.create({
 	actions: {
 		gap: spacing.sm,
 		paddingBottom: spacing.sm,
+	},
+	bannerPad: {
+		marginTop: spacing.md,
 	},
 	card: {
 		minHeight: touchTarget.minHeight,

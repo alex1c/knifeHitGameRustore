@@ -18,6 +18,7 @@ import { PrimaryButton } from '../components/PrimaryButton'
 import { Screen } from '../components/Screen'
 import { playSfx } from '../feel/audio'
 import { hapticTap } from '../feel/haptics'
+import { trackEvent } from '../analytics/adapter'
 import type { RootStackParamList } from '../navigation/types'
 import { useProgressionContext } from '../storage/ProgressionProvider'
 import { useSettingsContext } from '../storage/SettingsProvider'
@@ -91,6 +92,9 @@ export function SettingsScreen ({ navigation }: Props) {
 									return
 								}
 								void setProjectileThemeId(theme.id as ProjectileThemeId)
+								trackEvent('theme_selected', {
+									theme_id: theme.id,
+								})
 								hapticTap()
 							}}
 						/>
@@ -120,6 +124,9 @@ export function SettingsScreen ({ navigation }: Props) {
 									return
 								}
 								void setTargetThemeId(theme.id as TargetThemeId)
+								trackEvent('theme_selected', {
+									theme_id: theme.id,
+								})
 								hapticTap()
 							}}
 						/>
@@ -130,9 +137,13 @@ export function SettingsScreen ({ navigation }: Props) {
 			<View style={styles.about}>
 				<Text style={styles.aboutTitle}>О игре</Text>
 				<Text style={styles.aboutBody}>
-					Точный бросок — аркада на точность и тайминг для RuStore.
+					Меткий нож — аркада на точность и тайминг для RuStore.
 				</Text>
-				<Text style={styles.aboutMeta}>Precision Throw · v1.0.0</Text>
+				<Text style={styles.aboutMeta}>ForestMusic · v1.0.0</Text>
+				<Text style={styles.aboutMeta}>
+					Приложение использует AppMetrica (аналитика) и рекламные
+					технологии Яндекса. Полный privacy URL будет в release phase.
+				</Text>
 			</View>
 
 			<PrimaryButton

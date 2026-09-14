@@ -1,5 +1,6 @@
 /**
- * Playable Game screen — core loop + feel + theme presentation.
+ * Campaign Game screen — core loop + feel + optional rewarded second chance.
+ * No banners during active gameplay.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -14,6 +15,10 @@ import {
 	resolveTargetThemeId,
 	themesUnlockedAtLevel,
 } from '../appearance/themes'
+import { useAdsContext } from '../ads/AdsProvider'
+import { canOfferCampaignSecondChance } from '../ads/secondChance'
+import { useGameplayAdGuard } from '../ads/useGameplayAdGuard'
+import { trackEvent } from '../analytics/adapter'
 import { GameCanvas } from '../components/GameCanvas'
 import { PrimaryButton } from '../components/PrimaryButton'
 import { getNextLevelId } from '../game/config/levels'
@@ -46,8 +51,18 @@ function GameSession ({ levelId, navigation }: GameSessionProps) {
 	const { markLevelCompleted, progression } = useProgressionContext()
 	const { noteCampaignCompletedCount } = useModesContext()
 	const { settings } = useSettingsContext()
+	const {
+		registerMeaningfulAction,
+		tryShowInterstitial,
+		showCampaignRewarded,
+	} = useAdsContext()
+	useGameplayAdGuard()
+
 	const recordedWinRef = useRef(false)
+	const recordedFailRef = useRef(false)
 	const [unlockToast, setUnlockToast] = useState<string | null>(null)
+	const [adBusy, setAdBusy] = useState(false)
+	const [adUnavailable, setAdUnavailable] = useState(false)
 	const {
 		level,
 		state,
@@ -61,8 +76,12 @@ function GameSession ({ levelId, navigation }: GameSessionProps) {
 		fxLocalAngle,
 		collisionFlashVisible,
 		showWinOverlay,
+		secondChanceUsedThisAttempt,
 		handleTap,
 		handleRetry,
+		pauseForAd,
+		resumeAfterAd,
+		applySecondChanceResume,
 	} = useGameController(levelId)
 
 	const projectileTheme = useMemo(() => {
@@ -82,10 +101,22 @@ function GameSession ({ levelId, navigation }: GameSessionProps) {
 	}, [progression.completedLevels, settings.targetThemeId])
 
 	useEffect(() => {
+		trackEvent('campaign_level_start', {
+			level: level.displayNumber,
+			mode: 'campaign',
+		})
+	}, [level.displayNumber, levelId])
+
+	useEffect(() => {
 		if (state.status !== 'won' || recordedWinRef.current) {
 			return
 		}
 		recordedWinRef.current = true
+		trackEvent('campaign_level_complete', {
+			level: level.displayNumber,
+			mode: 'campaign',
+		})
+		registerMeaningfulAction()
 		void markLevelCompleted(level.displayNumber).then((next) => {
 			void noteCampaignCompletedCount(next.completedLevels.length)
 			const unlocked = themesUnlockedAtLevel(level.displayNumber)
@@ -94,22 +125,44 @@ function GameSession ({ levelId, navigation }: GameSessionProps) {
 				setTimeout(() => setUnlockToast(null), 2200)
 			}
 		})
+		void tryShowInterstitial()
 	}, [
 		level.displayNumber,
 		markLevelCompleted,
 		noteCampaignCompletedCount,
+		registerMeaningfulAction,
 		state.status,
+		tryShowInterstitial,
 	])
+
+	useEffect(() => {
+		if (state.status !== 'lost' || recordedFailRef.current) {
+			return
+		}
+		if (collisionFlashVisible) {
+			return
+		}
+		recordedFailRef.current = true
+		trackEvent('campaign_level_fail', {
+			level: level.displayNumber,
+			mode: 'campaign',
+		})
+	}, [collisionFlashVisible, level.displayNumber, state.status])
 
 	const showReadyProjectile =
 		state.status === 'playing' || state.status === 'ready'
 	const showFlyingProjectile =
 		state.status === 'projectileFlying' ||
 		(state.status === 'lost' && collisionFlashVisible)
-	const canThrow = state.status === 'playing'
-	const showLossOverlay = state.status === 'lost' && !collisionFlashVisible
+	const canThrow = state.status === 'playing' && !adBusy
+	const showLossOverlay =
+		state.status === 'lost' && !collisionFlashVisible && !adBusy
 	const nextLevelId = getNextLevelId(level.id)
 	const isCampaignComplete = showWinOverlay && nextLevelId === null
+	const canSecondChance = canOfferCampaignSecondChance(
+		'campaign',
+		secondChanceUsedThisAttempt,
+	)
 
 	const handleNextLevel = () => {
 		if (nextLevelId) {
@@ -117,6 +170,33 @@ function GameSession ({ levelId, navigation }: GameSessionProps) {
 			return
 		}
 		navigation.navigate('Levels')
+	}
+
+	const handleRetryPress = () => {
+		recordedWinRef.current = false
+		recordedFailRef.current = false
+		setAdUnavailable(false)
+		handleRetry()
+	}
+
+	const handleSecondChance = async () => {
+		if (!canSecondChance || adBusy) {
+			return
+		}
+		setAdUnavailable(false)
+		setAdBusy(true)
+		pauseForAd()
+		const ok = await showCampaignRewarded()
+		if (ok) {
+			applySecondChanceResume()
+			recordedFailRef.current = false
+			resumeAfterAd()
+			setAdBusy(false)
+			return
+		}
+		resumeAfterAd()
+		setAdBusy(false)
+		setAdUnavailable(true)
 	}
 
 	return (
@@ -149,7 +229,7 @@ function GameSession ({ levelId, navigation }: GameSessionProps) {
 				style={styles.stage}
 				onPress={canThrow ? handleTap : undefined}
 				accessibilityRole="button"
-				accessibilityLabel="Игровая область. Коснитесь, чтобы бросить"
+				accessibilityLabel="Меткий нож. Коснитесь, чтобы бросить"
 				disabled={!canThrow}
 			>
 				<GameCanvas
@@ -197,7 +277,25 @@ function GameSession ({ levelId, navigation }: GameSessionProps) {
 						<Text style={styles.overlayBody}>
 							Предмет задел уже закреплённый.
 						</Text>
-						<PrimaryButton label="Ещё раз" onPress={handleRetry} />
+						{adUnavailable ? (
+							<Text style={styles.adError}>Реклама недоступна</Text>
+						) : null}
+						{canSecondChance ? (
+							<>
+								<PrimaryButton
+									label="Продолжить за рекламу"
+									onPress={() => {
+										void handleSecondChance()
+									}}
+								/>
+								<View style={styles.overlaySpacer} />
+							</>
+						) : null}
+						<PrimaryButton
+							label="Ещё раз"
+							variant={canSecondChance ? 'secondary' : undefined}
+							onPress={handleRetryPress}
+						/>
 						<View style={styles.overlaySpacer} />
 						<PrimaryButton
 							label="Назад"
@@ -229,7 +327,7 @@ function GameSession ({ levelId, navigation }: GameSessionProps) {
 						<PrimaryButton
 							label="Ещё раз"
 							variant="ghost"
-							onPress={handleRetry}
+							onPress={handleRetryPress}
 						/>
 					</View>
 				</View>
@@ -340,6 +438,12 @@ const styles = StyleSheet.create({
 		textAlign: 'center',
 		marginBottom: spacing.sm,
 		lineHeight: 22,
+	},
+	adError: {
+					color: colors.danger,
+		textAlign: 'center',
+		fontSize: typography.caption,
+		marginBottom: spacing.xs,
 	},
 	overlaySpacer: {
 		height: spacing.xs,

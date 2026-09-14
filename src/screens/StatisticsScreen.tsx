@@ -5,6 +5,7 @@
 import { StyleSheet, Text, View } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 
+import { BannerAdSlot } from '../ads/BannerAdSlot'
 import { PrimaryButton } from '../components/PrimaryButton'
 import { Screen } from '../components/Screen'
 import { PRODUCTION_LEVELS } from '../game/config/levels'
@@ -59,6 +60,7 @@ export function StatisticsScreen ({ navigation }: Props) {
 				variant="ghost"
 				onPress={() => navigation.goBack()}
 			/>
+			<BannerAdSlot placement="secondary" />
 		</Screen>
 	)
 }

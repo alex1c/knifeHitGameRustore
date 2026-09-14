@@ -1,5 +1,5 @@
 /**
- * Deterministic game engine for Precision Throw.
+ * Deterministic game engine for Меткий нож.
  *
  * Authoritative timing
  * --------------------

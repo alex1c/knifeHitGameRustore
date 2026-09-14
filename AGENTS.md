@@ -1,4 +1,4 @@
-# Precision Throw / ForestMusic notes
+# Меткий нож / ForestMusic notes
 
 Read Expo SDK 57 docs before native or config changes:
 https://docs.expo.dev/versions/v57.0.0/
@@ -10,4 +10,4 @@ https://docs.expo.dev/versions/v57.0.0/
 - No RuStore upload / release AAB in foundation phases.
 - Keep game rules / collision math free of Skia and React UI.
 - Do not drive gameplay-critical state with per-frame React setState.
-- Ads SDK is not part of Phase 1.
+- Ads during active gameplay are forbidden.
