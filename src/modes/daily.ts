@@ -82,7 +82,7 @@ function buildCandidate (
 		displayNumber: 1,
 		requiredThrows,
 		targetRadius: 100,
-		projectileSize: 14,
+		projectileSize: 12,
 		initialObstacles,
 		segments,
 	}
@@ -110,7 +110,7 @@ export function generateDailyChallenge (dateKey: string): DailyChallenge {
 			displayNumber: 1,
 			requiredThrows: 10,
 			targetRadius: 100,
-			projectileSize: 14,
+			projectileSize: 12,
 			initialObstacles: seed % 2 === 0 ? [0] : [0, 180],
 			segments: [
 				constantSegment(3200, seed % 2 === 0 ? fallbackSpeed : -fallbackSpeed),

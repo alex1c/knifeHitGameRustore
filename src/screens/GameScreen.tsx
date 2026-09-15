@@ -3,8 +3,15 @@
  * No banners during active gameplay.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+	Pressable,
+	StyleSheet,
+	Text,
+	useWindowDimensions,
+	View,
+	type LayoutChangeEvent,
+} from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -48,6 +55,22 @@ interface GameSessionProps {
 
 function GameSession ({ levelId, navigation }: GameSessionProps) {
 	const insets = useSafeAreaInsets()
+	const { width: windowWidth, height: windowHeight } = useWindowDimensions()
+	const [stageSize, setStageSize] = useState({
+		width: Math.max(1, windowWidth - 32),
+		height: Math.max(1, windowHeight * 0.55),
+	})
+	const handleStageLayout = useCallback((event: LayoutChangeEvent) => {
+		const { width, height } = event.nativeEvent.layout
+		if (width <= 0 || height <= 0) {
+			return
+		}
+		setStageSize((prev) =>
+			prev.width === width && prev.height === height
+				? prev
+				: { width, height },
+		)
+	}, [])
 	const { markLevelCompleted, progression } = useProgressionContext()
 	const { noteCampaignCompletedCount } = useModesContext()
 	const { settings } = useSettingsContext()
@@ -228,27 +251,32 @@ function GameSession ({ levelId, navigation }: GameSessionProps) {
 			<Pressable
 				style={styles.stage}
 				onPress={canThrow ? handleTap : undefined}
+				onLayout={handleStageLayout}
 				accessibilityRole="button"
 				accessibilityLabel="Меткий нож. Коснитесь, чтобы бросить"
 				disabled={!canThrow}
 			>
-				<GameCanvas
-					level={level}
-					attachedProjectiles={state.attachedProjectiles}
-					clock={clock}
-					roundStartClock={roundStartClock}
-					isPaused={isPaused}
-					frozenElapsedMs={frozenElapsedMs}
-					flightProgress={flightProgress}
-					fxProgress={fxProgress}
-					fxKind={fxKind}
-					fxLocalAngle={fxLocalAngle}
-					projectileTheme={projectileTheme}
-					targetTheme={targetTheme}
-					showReadyProjectile={showReadyProjectile}
-					showFlyingProjectile={showFlyingProjectile}
-					collisionFlashVisible={collisionFlashVisible}
-				/>
+				<View style={styles.canvasSlot}>
+					<GameCanvas
+						level={level}
+						attachedProjectiles={state.attachedProjectiles}
+						clock={clock}
+						roundStartClock={roundStartClock}
+						isPaused={isPaused}
+						frozenElapsedMs={frozenElapsedMs}
+						flightProgress={flightProgress}
+						fxProgress={fxProgress}
+						fxKind={fxKind}
+						fxLocalAngle={fxLocalAngle}
+						projectileTheme={projectileTheme}
+						targetTheme={targetTheme}
+						showReadyProjectile={showReadyProjectile}
+						showFlyingProjectile={showFlyingProjectile}
+						collisionFlashVisible={collisionFlashVisible}
+						availableWidth={stageSize.width}
+						availableHeight={Math.max(1, stageSize.height - 28)}
+					/>
+				</View>
 
 				<View style={styles.ammoRow}>
 					{Array.from({ length: state.remainingThrows }).map((_, index) => (
@@ -365,6 +393,13 @@ const styles = StyleSheet.create({
 	stage: {
 		flex: 1,
 		justifyContent: 'center',
+		overflow: 'visible',
+	},
+	canvasSlot: {
+		flex: 1,
+		alignItems: 'center',
+		justifyContent: 'center',
+		overflow: 'visible',
 	},
 	ammoRow: {
 		flexDirection: 'row',

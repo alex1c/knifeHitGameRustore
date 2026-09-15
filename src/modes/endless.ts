@@ -131,7 +131,7 @@ export function buildEndlessLevel (
 		displayNumber: wave,
 		requiredThrows: waveHits,
 		targetRadius: 100,
-		projectileSize: 14,
+		projectileSize: 12,
 		initialObstacles: obstaclesForBand(band),
 		segments: segmentsForBand(band, wave),
 	}
@@ -143,7 +143,7 @@ export function buildEndlessLevel (
 			displayNumber: wave,
 			requiredThrows: waveHits,
 			targetRadius: 100,
-			projectileSize: 14,
+			projectileSize: 12,
 			initialObstacles: band === 0 ? [] : [0],
 			segments: [constantSegment(3500, band % 2 === 0 ? 40 : -40)],
 		}

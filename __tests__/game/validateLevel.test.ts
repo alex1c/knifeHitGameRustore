@@ -19,7 +19,7 @@ function validLevel (overrides: Partial<LevelConfig> = {}): LevelConfig {
 		displayNumber: 99,
 		requiredThrows: 5,
 		targetRadius: 100,
-		projectileSize: 14,
+		projectileSize: 12,
 		initialObstacles: [0],
 		segments: [constantSegment(2000, 40)],
 		...overrides,

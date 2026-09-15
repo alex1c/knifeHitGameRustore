@@ -4,9 +4,7 @@
  * Does NOT claim timing-game solvability.
  */
 
-import {
-	computeMinAngularSeparationDegrees,
-} from '../engine/gameEngine'
+import { computeMinAngularSeparationDegrees } from '../math/projectileGeometry'
 import { isAngularCollision, normalizeAngle } from '../math/angles'
 import type { LevelConfig, RotationSegment } from '../models/types'
 

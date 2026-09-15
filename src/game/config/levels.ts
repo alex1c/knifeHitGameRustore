@@ -2,10 +2,10 @@
  * Production campaign: 30 deterministic levels.
  * Difficulty via target timeline behavior + balanced rim fill.
  *
- * Geometry (unchanged):
- * targetRadius=100, projectileSize=14, padding=3°
- * → minAngularSeparation ≈ 11.01°, theoretical capacity = 32.
- * Campaign fill targets stay well below ~75% capacity so late gaps stay readable.
+ * Geometry (aligned with projectileGeometry.ts):
+ * targetRadius=100, projectileSize=12, padding=1°
+ * → minAngularSeparation ≈ 7.88°, theoretical capacity = 45.
+ * requiredThrows intentionally unchanged by the geometry hotfix.
  */
 
 import type { LevelConfig, RotationSegment } from '../models/types'
@@ -14,9 +14,13 @@ import {
 	pauseSegment,
 	rampSegment,
 } from '../engine/timeline'
+import {
+	LOGICAL_PROJECTILE_WIDTH,
+	LOGICAL_TARGET_RADIUS,
+} from '../math/projectileGeometry'
 
-const R = 100
-const P = 14
+const R = LOGICAL_TARGET_RADIUS
+const P = LOGICAL_PROJECTILE_WIDTH
 
 function level (
 	displayNumber: number,

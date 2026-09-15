@@ -3,8 +3,15 @@
  * No banners during active gameplay.
  */
 
-import { useEffect, useMemo, useRef } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+	Pressable,
+	StyleSheet,
+	Text,
+	useWindowDimensions,
+	View,
+	type LayoutChangeEvent,
+} from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -30,6 +37,22 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Endless'>
 
 export function EndlessScreen ({ navigation }: Props) {
 	const insets = useSafeAreaInsets()
+	const { width: windowWidth, height: windowHeight } = useWindowDimensions()
+	const [stageSize, setStageSize] = useState({
+		width: Math.max(1, windowWidth - 32),
+		height: Math.max(1, windowHeight * 0.55),
+	})
+	const handleStageLayout = useCallback((event: LayoutChangeEvent) => {
+		const { width, height } = event.nativeEvent.layout
+		if (width <= 0 || height <= 0) {
+			return
+		}
+		setStageSize((prev) =>
+			prev.width === width && prev.height === height
+				? prev
+				: { width, height },
+		)
+	}, [])
 	const { progression } = useProgressionContext()
 	const { settings } = useSettingsContext()
 	const { resetEndlessBestForQa } = useModesContext()
@@ -152,6 +175,7 @@ export function EndlessScreen ({ navigation }: Props) {
 				style={styles.stage}
 				disabled={!canThrow}
 				onPress={canThrow ? handleTap : undefined}
+				onLayout={handleStageLayout}
 				accessibilityRole="button"
 				accessibilityLabel="Бесконечный режим. Коснитесь, чтобы бросить"
 			>
@@ -171,6 +195,8 @@ export function EndlessScreen ({ navigation }: Props) {
 					showReadyProjectile={showReady}
 					showFlyingProjectile={showFlying}
 					collisionFlashVisible={collisionFlashVisible}
+					availableWidth={stageSize.width}
+					availableHeight={stageSize.height}
 				/>
 			</Pressable>
 
@@ -241,7 +267,7 @@ const styles = StyleSheet.create({
 	},
 	hudValue: { color: colors.accent, fontSize: typography.caption, fontWeight: '600' },
 	hudMuted: { color: colors.textMuted, fontSize: typography.caption },
-	stage: { flex: 1, justifyContent: 'center' },
+	stage: { flex: 1, justifyContent: 'center', overflow: 'visible' },
 	devRow: { gap: spacing.xs, marginBottom: spacing.sm },
 	banner: {
 		position: 'absolute',

@@ -21,13 +21,16 @@ import {
 	WORLD_IMPACT_ANGLE_DEGREES,
 	worldAngleToLocalAngle,
 } from '../math/angles'
+import {
+	COLLISION_PADDING_DEGREES,
+	computeMinAngularSeparationDegrees,
+} from '../math/projectileGeometry'
 import { targetRotationAtElapsed } from './timeline'
 
 /** Vertical flight duration in milliseconds (arcade timing feel). */
 export const FLIGHT_DURATION_MS = 160
 
-/** Extra angular padding beyond geometric shaft width. */
-export const COLLISION_PADDING_DEGREES = 3
+export { COLLISION_PADDING_DEGREES, computeMinAngularSeparationDegrees }
 
 /**
  * Authoritative target rotation angle (normalized) at elapsed round time.
@@ -48,22 +51,6 @@ export function localImpactAngleAtElapsed (
 ): number {
 	const targetAngle = targetAngleAtElapsed(level, elapsedMs)
 	return worldAngleToLocalAngle(WORLD_IMPACT_ANGLE_DEGREES, targetAngle)
-}
-
-/**
- * Minimum center-to-center angular separation from geometry.
- * For two equal projectiles this is 2 × halfAngle (+ padding),
- * i.e. the sum of both angular half-extents on the rim.
- */
-export function computeMinAngularSeparationDegrees (
-	level: LevelConfig,
-	paddingDegrees: number = COLLISION_PADDING_DEGREES,
-): number {
-	const halfWidth = level.projectileSize / 2
-	const halfAngleRadians = Math.atan2(halfWidth, level.targetRadius)
-	const minSeparation =
-		((2 * halfAngleRadians) * 180) / Math.PI + paddingDegrees
-	return minSeparation
 }
 
 export function collisionConfigForLevel (

@@ -24,7 +24,7 @@ function levelWith (
 		displayNumber: 1,
 		requiredThrows: 5,
 		targetRadius: 100,
-		projectileSize: 14,
+		projectileSize: 12,
 		initialObstacles: [],
 		segments,
 	}

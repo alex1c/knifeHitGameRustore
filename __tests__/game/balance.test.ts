@@ -29,12 +29,12 @@ describe('campaign geometry constants', () => {
 	it('documents production rim geometry', () => {
 		const sample = PRODUCTION_LEVELS[0]!
 		expect(sample.targetRadius).toBe(100)
-		expect(sample.projectileSize).toBe(14)
-		expect(COLLISION_PADDING_DEGREES).toBe(3)
+		expect(sample.projectileSize).toBe(12)
+		expect(COLLISION_PADDING_DEGREES).toBe(1)
 		const separation = computeMinAngularSeparationDegrees(sample)
-		expect(separation).toBeGreaterThan(10)
-		expect(separation).toBeLessThan(12)
-		expect(theoreticalCapacity(sample)).toBe(32)
+		expect(separation).toBeGreaterThan(7)
+		expect(separation).toBeLessThan(9)
+		expect(theoreticalCapacity(sample)).toBe(45)
 	})
 })
 
@@ -66,7 +66,8 @@ describe('campaign fill balance', () => {
 		const level6 = PRODUCTION_LEVELS.find((entry) => entry.displayNumber === 6)!
 		expect(level6.requiredThrows).toBeGreaterThanOrEqual(10)
 		expect(fillStats(level6).finalObjects).toBeGreaterThanOrEqual(12)
-		expect(fillStats(level6).fillRatio).toBeGreaterThanOrEqual(0.4)
+		// Capacity rose after geometry hotfix; keep absolute throw length, not old fill %.
+		expect(fillStats(level6).fillRatio).toBeGreaterThanOrEqual(0.25)
 	})
 
 	it('raises expected fill from early to late campaign', () => {

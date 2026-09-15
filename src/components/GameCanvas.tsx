@@ -1,11 +1,12 @@
 /**
- * Skia renderer — polished target/projectile themes + lightweight FX.
- * Target rotation samples the authoritative compiled timeline.
- * Particles/pulses are driven by shared values (no React state per frame).
+ * Skia renderer — target / projectile themes + lightweight FX.
+ *
+ * Geometry comes from projectileGeometry.ts via a uniform playfield scale.
+ * Attached projectiles live in LOCAL target space; the target group rotates them.
  */
 
 import { useMemo } from 'react'
-import { StyleSheet, useWindowDimensions, View } from 'react-native'
+import { StyleSheet, View } from 'react-native'
 import {
 	Canvas,
 	Circle,
@@ -24,8 +25,14 @@ import {
 import type { ProjectileTheme, TargetTheme } from '../appearance/themes'
 import {
 	compileLevelTimeline,
+	computeMinAngularSeparationDegrees,
 	sampleCompiledTimeline,
 } from '../game/engine'
+import {
+	attachedProjectilePose,
+	computePlayfieldLayout,
+	tipRadiusFromCenter,
+} from '../game/math/projectileGeometry'
 import type { AttachedProjectile, LevelConfig } from '../game/models'
 import type { FxKind } from '../hooks/useGameController'
 import { colors } from '../theme'
@@ -46,10 +53,17 @@ interface GameCanvasProps {
 	showReadyProjectile: boolean
 	showFlyingProjectile: boolean
 	collisionFlashVisible: boolean
+	/** Available stage box — canvas scales to fit target + handles. */
+	availableWidth: number
+	availableHeight: number
 }
 
 const PARTICLE_COUNT = 8
 
+/**
+ * Tip at (0, 0), handle extends toward +Y.
+ * All themes share the same width/length envelope for fair collision.
+ */
 function makeProjectilePath (
 	width: number,
 	length: number,
@@ -59,27 +73,56 @@ function makeProjectilePath (
 	const half = width / 2
 	if (silhouette === 'pin') {
 		tip.moveTo(0, 0)
-		tip.lineTo(half * 0.7, length * 0.35)
+		tip.lineTo(half * 0.55, length * 0.28)
 		tip.lineTo(half * 0.45, length)
 		tip.lineTo(-half * 0.45, length)
-		tip.lineTo(-half * 0.7, length * 0.35)
+		tip.lineTo(-half * 0.55, length * 0.28)
 		tip.close()
 	} else if (silhouette === 'dart') {
 		tip.moveTo(0, 0)
-		tip.lineTo(half, length * 0.4)
+		tip.lineTo(half * 0.85, length * 0.32)
 		tip.lineTo(half * 0.55, length)
 		tip.lineTo(-half * 0.55, length)
-		tip.lineTo(-half, length * 0.4)
+		tip.lineTo(-half * 0.85, length * 0.32)
 		tip.close()
 	} else {
 		tip.moveTo(0, 0)
-		tip.lineTo(half, length * 0.55)
+		tip.lineTo(half * 0.9, length * 0.4)
 		tip.lineTo(half * 0.35, length)
 		tip.lineTo(-half * 0.35, length)
-		tip.lineTo(-half, length * 0.55)
+		tip.lineTo(-half * 0.9, length * 0.4)
 		tip.close()
 	}
 	return tip
+}
+
+function ProjectileShape ({
+	path,
+	width,
+	length,
+	fill,
+	accent,
+}: {
+	path: ReturnType<typeof makeProjectilePath>
+	width: number
+	length: number
+	fill: string
+	accent: string
+}) {
+	return (
+		<>
+			<Path path={path} color={fill} />
+			<RoundedRect
+				x={-width * 0.22}
+				y={length * 0.45}
+				width={width * 0.44}
+				height={length * 0.2}
+				r={2}
+				color={accent}
+				opacity={0.7}
+			/>
+		</>
+	)
 }
 
 export function GameCanvas ({
@@ -98,18 +141,32 @@ export function GameCanvas ({
 	showReadyProjectile,
 	showFlyingProjectile,
 	collisionFlashVisible,
+	availableWidth,
+	availableHeight,
 }: GameCanvasProps) {
-	const { width } = useWindowDimensions()
 	const compiled = useMemo(() => compileLevelTimeline(level), [level])
 
-	const size = Math.min(width - 32, 360)
-	const canvasHeight = size * 1.35
-	const center = size / 2
-	const targetRadius = size * 0.32
-	const projectileLength = size * 0.14
-	const projectileWidth = size * 0.045
-	const restY = size * 1.12
-	const impactY = center + targetRadius - 4
+	const layout = useMemo(
+		() =>
+			computePlayfieldLayout(
+				availableWidth,
+				availableHeight,
+				level.targetRadius,
+			),
+		[availableHeight, availableWidth, level.targetRadius],
+	)
+
+	const {
+		canvasWidth,
+		canvasHeight,
+		centerX,
+		centerY,
+		targetRadius,
+		projectileWidth,
+		projectileLength,
+		restTipY,
+		impactTipY,
+	} = layout
 
 	const projectilePath = useMemo(
 		() =>
@@ -119,6 +176,11 @@ export function GameCanvas ({
 				projectileTheme.silhouette,
 			),
 		[projectileLength, projectileTheme.silhouette, projectileWidth],
+	)
+
+	const minSeparation = useMemo(
+		() => computeMinAngularSeparationDegrees(level),
+		[level],
 	)
 
 	const {
@@ -161,8 +223,8 @@ export function GameCanvas ({
 
 	const flyingTransform = useDerivedValue(() => {
 		'worklet'
-		const y = restY + (impactY - restY) * flightProgress.value
-		return [{ translateX: center }, { translateY: y }]
+		const y = restTipY + (impactTipY - restTipY) * flightProgress.value
+		return [{ translateX: centerX }, { translateY: y }]
 	})
 
 	const impactRingRadius = useDerivedValue(() => {
@@ -187,14 +249,19 @@ export function GameCanvas ({
 
 	const fxWorld = useMemo(() => {
 		if (fxLocalAngle === null) {
-			return { x: center, y: center + targetRadius }
+			return {
+				x: centerX,
+				y: centerY + tipRadiusFromCenter(targetRadius),
+			}
 		}
-		const theta = (fxLocalAngle * Math.PI) / 180
-		return {
-			x: center + targetRadius * Math.sin(theta),
-			y: center - targetRadius * Math.cos(theta),
-		}
-	}, [center, fxLocalAngle, targetRadius])
+		const pose = attachedProjectilePose(
+			centerX,
+			centerY,
+			targetRadius,
+			fxLocalAngle,
+		)
+		return { x: pose.tipX, y: pose.tipY }
+	}, [centerX, centerY, fxLocalAngle, targetRadius])
 
 	const particleAngles = useMemo(
 		() =>
@@ -206,26 +273,36 @@ export function GameCanvas ({
 	)
 
 	return (
-		<View style={[styles.wrap, { width: size, height: canvasHeight }]}>
-			<Canvas style={{ width: size, height: canvasHeight }}>
+		<View
+			style={[styles.wrap, { width: canvasWidth, height: canvasHeight }]}
+			// Avoid parent View clipping handles during rotation.
+			collapsable={false}
+		>
+			<Canvas
+				style={{ width: canvasWidth, height: canvasHeight }}
+				// Skia canvas must cover the full handle extent; no clipRect.
+			>
 				<Group transform={[...outerShake]}>
-					<Group origin={vec(center, center)} transform={targetTransform}>
+					<Group
+						origin={vec(centerX, centerY)}
+						transform={targetTransform}
+					>
 						<Circle
-							cx={center}
-							cy={center}
-							r={targetRadius + 14}
+							cx={centerX}
+							cy={centerY}
+							r={targetRadius + projectileWidth * 0.9}
 							color={targetTheme.accent}
 							opacity={0.12}
 						/>
 						<Circle
-							cx={center}
-							cy={center}
+							cx={centerX}
+							cy={centerY}
 							r={targetRadius}
 							color={targetTheme.core}
 						/>
 						<Circle
-							cx={center}
-							cy={center}
+							cx={centerX}
+							cy={centerY}
 							r={targetRadius * 0.62}
 							color={targetTheme.mark}
 							style="stroke"
@@ -233,34 +310,34 @@ export function GameCanvas ({
 							opacity={0.35}
 						/>
 						<Circle
-							cx={center}
-							cy={center}
+							cx={centerX}
+							cy={centerY}
 							r={targetRadius * 0.28}
 							color={targetTheme.accent}
 							opacity={0.55}
 						/>
 						<Circle
-							cx={center}
-							cy={center}
+							cx={centerX}
+							cy={centerY}
 							r={targetRadius}
 							color={targetTheme.ring}
 							style="stroke"
-							strokeWidth={10}
+							strokeWidth={Math.max(6, projectileWidth * 0.55)}
 						/>
 						{[0, 45, 90, 135, 180, 225, 270, 315].map((deg) => {
 							const rad = (deg * Math.PI) / 180
-							const inner = targetRadius - 18
-							const outer = targetRadius - 6
+							const inner = targetRadius - projectileWidth * 1.2
+							const outer = targetRadius - projectileWidth * 0.35
 							return (
 								<Line
 									key={`tick-${deg}`}
 									p1={vec(
-										center + inner * Math.sin(rad),
-										center - inner * Math.cos(rad),
+										centerX + inner * Math.sin(rad),
+										centerY - inner * Math.cos(rad),
 									)}
 									p2={vec(
-										center + outer * Math.sin(rad),
-										center - outer * Math.cos(rad),
+										centerX + outer * Math.sin(rad),
+										centerY - outer * Math.cos(rad),
 									)}
 									color={targetTheme.mark}
 									strokeWidth={deg % 90 === 0 ? 3 : 1.5}
@@ -269,41 +346,53 @@ export function GameCanvas ({
 							)
 						})}
 
+						{__DEV__ ? (
+							<GeometryDebugOverlay
+								centerX={centerX}
+								centerY={centerY}
+								targetRadius={targetRadius}
+								attachedProjectiles={attachedProjectiles}
+								minSeparationDegrees={minSeparation}
+								candidateAngle={fxLocalAngle}
+							/>
+						) : null}
+
 						{attachedProjectiles.map((projectile) => {
-							const theta = (projectile.angle * Math.PI) / 180
-							const x = center + targetRadius * Math.sin(theta)
-							const y = center - targetRadius * Math.cos(theta)
+							const pose = attachedProjectilePose(
+								centerX,
+								centerY,
+								targetRadius,
+								projectile.angle,
+							)
 							const isObstacle = projectile.id.startsWith('obstacle')
 							return (
 								<Group
 									key={projectile.id}
-									origin={vec(x, y)}
-									transform={[{ rotate: theta }]}
+									transform={[
+										{ translateX: pose.tipX },
+										{ translateY: pose.tipY },
+										{ rotate: pose.rotationRadians },
+									]}
 								>
-									<Group transform={[{ translateX: x, translateY: y }]}>
-										<Path
-											path={projectilePath}
-											color={
-												isObstacle ? colors.obstacle : projectileTheme.fill
-											}
-										/>
-										<RoundedRect
-											x={-projectileWidth * 0.22}
-											y={projectileLength * 0.45}
-											width={projectileWidth * 0.44}
-											height={projectileLength * 0.2}
-											r={2}
-											color={projectileTheme.accent}
-											opacity={0.7}
-										/>
-									</Group>
+									<ProjectileShape
+										path={projectilePath}
+										width={projectileWidth}
+										length={projectileLength}
+										fill={
+											isObstacle
+												? colors.obstacle
+												: projectileTheme.fill
+										}
+										accent={projectileTheme.accent}
+									/>
 								</Group>
 							)
 						})}
 
 						{collisionFlashVisible && fxLocalAngle !== null ? (
 							<CollisionMarker
-								center={center}
+								centerX={centerX}
+								centerY={centerY}
 								targetRadius={targetRadius}
 								localAngle={fxLocalAngle}
 								projectileWidth={projectileWidth}
@@ -350,43 +439,122 @@ export function GameCanvas ({
 
 				{showFlyingProjectile ? (
 					<Group transform={flyingTransform}>
-						<Path path={projectilePath} color={projectileTheme.fill} />
-						<RoundedRect
-							x={-projectileWidth * 0.22}
-							y={projectileLength * 0.45}
-							width={projectileWidth * 0.44}
-							height={projectileLength * 0.2}
-							r={2}
-							color={projectileTheme.accent}
-							opacity={0.7}
+						<ProjectileShape
+							path={projectilePath}
+							width={projectileWidth}
+							length={projectileLength}
+							fill={projectileTheme.fill}
+							accent={projectileTheme.accent}
 						/>
 					</Group>
 				) : null}
 
 				{showReadyProjectile ? (
-					<Group transform={[{ translateX: center, translateY: restY }]}>
-						<Path path={projectilePath} color={projectileTheme.fill} />
-						<RoundedRect
-							x={-projectileWidth * 0.22}
-							y={projectileLength * 0.45}
-							width={projectileWidth * 0.44}
-							height={projectileLength * 0.2}
-							r={2}
-							color={projectileTheme.accent}
-							opacity={0.7}
+					<Group
+						transform={[
+							{ translateX: centerX },
+							{ translateY: restTipY },
+						]}
+					>
+						<ProjectileShape
+							path={projectilePath}
+							width={projectileWidth}
+							length={projectileLength}
+							fill={projectileTheme.fill}
+							accent={projectileTheme.accent}
 						/>
 					</Group>
 				) : null}
 
 				<Line
-					p1={vec(center, center + targetRadius + 12)}
-					p2={vec(center, restY)}
+					p1={vec(centerX, centerY + targetRadius + 8)}
+					p2={vec(centerX, restTipY)}
 					color={colors.border}
 					strokeWidth={2}
 					opacity={0.7}
 				/>
 			</Canvas>
 		</View>
+	)
+}
+
+interface GeometryDebugOverlayProps {
+	centerX: number
+	centerY: number
+	targetRadius: number
+	attachedProjectiles: AttachedProjectile[]
+	minSeparationDegrees: number
+	candidateAngle: number | null
+}
+
+/**
+ * __DEV__-only collision / attachment overlay for real-device QA.
+ */
+function GeometryDebugOverlay ({
+	centerX,
+	centerY,
+	targetRadius,
+	attachedProjectiles,
+	minSeparationDegrees,
+	candidateAngle,
+}: GeometryDebugOverlayProps) {
+	const half = minSeparationDegrees / 2
+	const inner = targetRadius * 0.92
+	const outer = targetRadius * 1.08
+
+	const sectors = attachedProjectiles.map((projectile) => {
+		const mid = projectile.angle
+		return { id: projectile.id, mid }
+	})
+
+	if (candidateAngle !== null) {
+		sectors.push({ id: 'candidate', mid: candidateAngle })
+	}
+
+	return (
+		<>
+			{sectors.map((sector) => {
+				const left = ((sector.mid - half) * Math.PI) / 180
+				const right = ((sector.mid + half) * Math.PI) / 180
+				const mid = (sector.mid * Math.PI) / 180
+				const isCandidate = sector.id === 'candidate'
+				const color = isCandidate ? '#FF6B6B' : '#5EEAD4'
+				return (
+					<Group key={`dbg-${sector.id}`} opacity={isCandidate ? 0.85 : 0.45}>
+						<Line
+							p1={vec(
+								centerX + inner * Math.sin(left),
+								centerY - inner * Math.cos(left),
+							)}
+							p2={vec(
+								centerX + outer * Math.sin(left),
+								centerY - outer * Math.cos(left),
+							)}
+							color={color}
+							strokeWidth={1.5}
+						/>
+						<Line
+							p1={vec(
+								centerX + inner * Math.sin(right),
+								centerY - inner * Math.cos(right),
+							)}
+							p2={vec(
+								centerX + outer * Math.sin(right),
+								centerY - outer * Math.cos(right),
+							)}
+							color={color}
+							strokeWidth={1.5}
+						/>
+						<Circle
+							cx={centerX + targetRadius * Math.sin(mid)}
+							cy={centerY - targetRadius * Math.cos(mid)}
+							r={3}
+							color={color}
+						/>
+					</Group>
+				)
+			})}
+		</>
 	)
 }
 
@@ -428,7 +596,8 @@ function FxParticle ({
 }
 
 interface CollisionMarkerProps {
-	center: number
+	centerX: number
+	centerY: number
 	targetRadius: number
 	localAngle: number
 	projectileWidth: number
@@ -436,26 +605,37 @@ interface CollisionMarkerProps {
 }
 
 function CollisionMarker ({
-	center,
+	centerX,
+	centerY,
 	targetRadius,
 	localAngle,
 	projectileWidth,
 	projectileLength,
 }: CollisionMarkerProps) {
-	const theta = (localAngle * Math.PI) / 180
-	const x = center + targetRadius * Math.sin(theta)
-	const y = center - targetRadius * Math.cos(theta)
+	const pose = attachedProjectilePose(
+		centerX,
+		centerY,
+		targetRadius,
+		localAngle,
+	)
 
 	return (
-		<Group origin={vec(x, y)} transform={[{ rotate: theta }]}>
-			<Circle cx={x} cy={y} r={projectileWidth * 1.2} color={colors.danger} />
+		<Group
+			transform={[
+				{ translateX: pose.tipX },
+				{ translateY: pose.tipY },
+				{ rotate: pose.rotationRadians },
+			]}
+		>
+			<Circle cx={0} cy={0} r={projectileWidth * 0.7} color={colors.danger} />
 			<RoundedRect
-				x={x - projectileWidth / 2}
-				y={y - 4}
+				x={-projectileWidth / 2}
+				y={0}
 				width={projectileWidth}
 				height={projectileLength}
 				r={4}
 				color={colors.danger}
+				opacity={0.55}
 			/>
 		</Group>
 	)
@@ -464,5 +644,6 @@ function CollisionMarker ({
 const styles = StyleSheet.create({
 	wrap: {
 		alignSelf: 'center',
+		overflow: 'visible',
 	},
 })
