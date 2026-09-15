@@ -38,10 +38,10 @@ describe('endless difficulty', () => {
 	})
 
 	it('wave hit targets grow then cap', () => {
-		expect(hitsForWave(1)).toBe(8)
-		expect(hitsForWave(2)).toBe(9)
-		expect(hitsForWave(5)).toBe(12)
-		expect(hitsForWave(20)).toBe(12)
+		expect(hitsForWave(1)).toBe(10)
+		expect(hitsForWave(2)).toBe(11)
+		expect(hitsForWave(5)).toBe(14)
+		expect(hitsForWave(20)).toBe(14)
 	})
 })
 

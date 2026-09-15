@@ -12,7 +12,7 @@ import type { LevelConfig, RotationSegment } from '../models/types'
 
 export const LEVEL_LIMITS = {
 	minRequiredThrows: 1,
-	maxRequiredThrows: 12,
+	maxRequiredThrows: 20,
 	minTargetRadius: 40,
 	maxTargetRadius: 200,
 	minProjectileSize: 6,
@@ -21,9 +21,12 @@ export const LEVEL_LIMITS = {
 	maxSegmentDurationMs: 20_000,
 	maxAbsSpeed: 140,
 	maxSegments: 12,
-	maxInitialObstacles: 6,
+	maxInitialObstacles: 8,
 	minCycleDurationMs: 400,
 } as const
+
+/** Practical soft ceiling — leave readable gaps near the rim. */
+export const SAFE_CAPACITY_FILL_RATIO = 0.75
 
 export interface ValidationIssue {
 	path: string

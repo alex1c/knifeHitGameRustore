@@ -29,8 +29,8 @@ import {
 	tryBeginThrow,
 } from '../game/engine'
 
-export const ENDLESS_BASE_WAVE_HITS = 8
-export const ENDLESS_MAX_WAVE_HITS = 12
+export const ENDLESS_BASE_WAVE_HITS = 10
+export const ENDLESS_MAX_WAVE_HITS = 14
 
 export type EndlessDifficultyBand = 0 | 1 | 2 | 3 | 4
 

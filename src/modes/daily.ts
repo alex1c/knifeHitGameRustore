@@ -29,7 +29,7 @@ function buildCandidate (
 ): LevelConfig {
 	const rng = createSeededRng((seed + attempt * 9973) >>> 0)
 	const band = seededInt(rng, 0, 3)
-	const requiredThrows = seededInt(rng, 5, 8)
+	const requiredThrows = seededInt(rng, 9, 13)
 	const speed = seededInt(rng, 36, 62)
 	const cw = rng() < 0.5
 
@@ -108,7 +108,7 @@ export function generateDailyChallenge (dateKey: string): DailyChallenge {
 		level: {
 			id: `daily-${dateKey}`,
 			displayNumber: 1,
-			requiredThrows: 6,
+			requiredThrows: 10,
 			targetRadius: 100,
 			projectileSize: 14,
 			initialObstacles: seed % 2 === 0 ? [0] : [0, 180],
